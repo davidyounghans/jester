@@ -158,8 +158,8 @@
       }
 
       function handleFlash(payload) {
-        const side = payload.side === 'home' ? 'HOME' : 'AWAY';
-        messageEl.textContent = side;
+        const label = payload.side === 'home' ? 'DEN' : 'AWAY';
+        messageEl.textContent = label;
         document.body.dataset.side = payload.side;
         document.body.classList.remove('flash');
         void document.body.offsetWidth; // restart animation
