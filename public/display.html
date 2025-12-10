@@ -30,6 +30,10 @@
         background: radial-gradient(circle at top, rgba(16, 185, 129, 0.6), rgba(15, 23, 42, 1));
       }
 
+      body[data-side='cancel'] {
+        background: radial-gradient(circle at top, rgba(248, 113, 113, 0.6), rgba(15, 23, 42, 1));
+      }
+
       body.flash {
         animation: pulse 600ms ease;
       }
@@ -158,7 +162,12 @@
       }
 
       function handleFlash(payload) {
-        const label = payload.side === 'home' ? 'DEN' : 'AWAY';
+        let label = 'AWAY';
+        if (payload.side === 'home') {
+          label = 'DEN';
+        } else if (payload.side === 'cancel') {
+          label = 'CANCEL';
+        }
         messageEl.textContent = label;
         document.body.dataset.side = payload.side;
         document.body.classList.remove('flash');

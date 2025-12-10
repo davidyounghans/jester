@@ -73,7 +73,7 @@
 
       .buttons {
         display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
         gap: 1rem;
         margin-top: auto;
       }
@@ -95,6 +95,10 @@
 
       .buttons button.away {
         background: linear-gradient(120deg, #34d399, #10b981);
+      }
+
+      .buttons button.cancel {
+        background: linear-gradient(120deg, #f87171, #ef4444);
       }
 
       .buttons button:disabled {
@@ -129,6 +133,7 @@
       <section class="buttons">
         <button type="button" class="home" id="homeBtn" disabled>Home</button>
         <button type="button" class="away" id="awayBtn" disabled>Away</button>
+        <button type="button" class="cancel" id="cancelBtn" disabled>Cancel</button>
       </section>
     </main>
     <script type="module">
@@ -141,6 +146,7 @@
       const displayCountEl = document.querySelector('#displayCount');
       const homeBtn = document.querySelector('#homeBtn');
       const awayBtn = document.querySelector('#awayBtn');
+      const cancelBtn = document.querySelector('#cancelBtn');
       const lastSendEl = document.querySelector('#lastSend');
 
       let link = null;
@@ -181,6 +187,7 @@
         const isReady = text === 'open';
         homeBtn.disabled = !isReady;
         awayBtn.disabled = !isReady;
+        cancelBtn.disabled = !isReady;
       }
 
       function handleAck(payload) {
@@ -201,6 +208,10 @@
       awayBtn.addEventListener('click', () => {
         vibrateTwice();
         link?.trigger('away');
+      });
+      cancelBtn.addEventListener('click', () => {
+        vibrateOnce();
+        link?.trigger('cancel');
       });
 
       function vibrateOnce() {

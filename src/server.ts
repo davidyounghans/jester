@@ -11,7 +11,7 @@ const HOST = process.env.HOST ?? '0.0.0.0';
 const HEARTBEAT_MS = 15000;
 
 type Role = 'control' | 'display';
-type Side = 'home' | 'away';
+type Side = 'home' | 'away' | 'cancel';
 
 const inboundSchema = z.discriminatedUnion('type', [
   z.object({
@@ -20,7 +20,7 @@ const inboundSchema = z.discriminatedUnion('type', [
   }),
   z.object({
     type: z.literal('trigger'),
-    side: z.union([z.literal('home'), z.literal('away')])
+    side: z.union([z.literal('home'), z.literal('away'), z.literal('cancel')])
   }),
   z.object({
     type: z.literal('ping')
