@@ -6,11 +6,12 @@ const MAX_RETRY_MS = 5000;
  */
 export class RealtimeLink {
   /**
-   * @param {{role: 'control'|'display', serverUrl: string, onStatus?: (string) => void, onFlash?: (payload) => void, onAck?: (payload) => void, onInfo?: (payload) => void}} options
+   * @param {{role: 'control'|'display', serverUrl: string, token?: string, onStatus?: (string) => void, onFlash?: (payload) => void, onAck?: (payload) => void, onInfo?: (payload) => void}} options
    */
   constructor(options) {
     this.role = options.role;
     this.serverUrl = options.serverUrl;
+    this.token = options.token;
     this.onStatus = options.onStatus ?? (() => {});
     this.onFlash = options.onFlash ?? (() => {});
     this.onAck = options.onAck ?? (() => {});
@@ -45,7 +46,7 @@ export class RealtimeLink {
     this.ws.addEventListener('open', () => {
       this.retryDelay = DEFAULT_RETRY_MS;
       this.onStatus('open');
-      this.send({ type: 'register', role: this.role });
+      this.send({ type: 'register', role: this.role, token: this.token });
     });
 
     this.ws.addEventListener('message', (event) => {

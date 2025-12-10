@@ -10,6 +10,7 @@ dotenv.config();
 const PORT = Number(process.env.PORT ?? 8080);
 const HOST = process.env.HOST ?? '0.0.0.0';
 const HEARTBEAT_MS = 15000;
+const ACCESS_TOKEN = process.env.ACCESS_TOKEN;
 
 type Role = 'control' | 'display';
 type Side = 'home' | 'away' | 'cancel';
@@ -17,7 +18,8 @@ type Side = 'home' | 'away' | 'cancel';
 const inboundSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('register'),
-    role: z.union([z.literal('control'), z.literal('display')])
+    role: z.union([z.literal('control'), z.literal('display')]),
+    token: z.string().max(200).optional()
   }),
   z.object({
     type: z.literal('trigger'),
@@ -62,6 +64,15 @@ const httpServer = http.createServer(async (req: IncomingMessage, res: ServerRes
   }
 
   if (url.pathname.startsWith('/config/kalshi')) {
+    if (ACCESS_TOKEN) {
+      const token = url.searchParams.get('token') ?? req.headers['x-access-token'];
+      if (!token || token !== ACCESS_TOKEN) {
+        res.writeHead(401, defaultJsonHeaders());
+        res.end(JSON.stringify({ error: 'unauthorized' }));
+        return;
+      }
+    }
+
     if (req.method === 'OPTIONS') {
       res.writeHead(204, corsHeaders());
       res.end();
@@ -155,7 +166,13 @@ wss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
         return;
       }
 
-      if (parsed.type === 'register') {
+  if (parsed.type === 'register') {
+        if (ACCESS_TOKEN && parsed.token !== ACCESS_TOKEN) {
+          send({ type: 'error', message: 'unauthorized' });
+          ws.close();
+          return;
+        }
+
         client.role = parsed.role;
         send({
           type: 'registered',

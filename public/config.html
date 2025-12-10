@@ -106,6 +106,10 @@
           Relay server URL (https://jester.fly.dev)
           <input type="url" id="serverUrl" required placeholder="https://jester.fly.dev" />
         </label>
+        <label>
+          Access token (optional; must match server ACCESS_TOKEN)
+          <input type="password" id="tokenInput" placeholder="shared secret" />
+        </label>
         <label class="toggle">
           <input type="checkbox" id="enabled" />
           Enable trading module
@@ -287,7 +291,8 @@
           logOutput.textContent = 'Enter the relay URL to view logs.';
           return;
         }
-        fetch(`${base.replace(/\/$/, '')}/config/kalshi/test`)
+        const tokenParam = tokenInput.value.trim() ? `?token=${encodeURIComponent(tokenInput.value.trim())}` : '';
+        fetch(`${base.replace(/\/$/, '')}/config/kalshi/test${tokenParam}`)
           .then((res) => res.json())
           .then((data) => {
             const events = data.events ?? [];
@@ -314,7 +319,8 @@
         if (!base) {
           return;
         }
-        fetch(`${base.replace(/\/$/, '')}/config/kalshi/test`, { method: 'DELETE' }).then(() => {
+        const tokenParam = tokenInput.value.trim() ? `?token=${encodeURIComponent(tokenInput.value.trim())}` : '';
+        fetch(`${base.replace(/\/$/, '')}/config/kalshi/test${tokenParam}`, { method: 'DELETE' }).then(() => {
           logOutput.textContent = 'Log cleared.';
         });
       }
