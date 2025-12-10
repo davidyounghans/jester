@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Kalshi Config</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Roboto", sans-serif;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: #020617;
+        color: #f8fafc;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem 1rem;
+      }
+
+      main {
+        width: 100%;
+        max-width: 520px;
+        background: rgba(15, 23, 42, 0.9);
+        border: 1px solid rgba(148, 163, 184, 0.25);
+        border-radius: 1.25rem;
+        padding: 2rem;
+        box-shadow: 0 60px 120px rgba(2, 6, 23, 0.8);
+        display: flex;
+        flex-direction: column;
+        gap: 1.25rem;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 1.6rem;
+      }
+
+      form {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+      }
+
+      label {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+        font-size: 0.9rem;
+      }
+
+      input[type="text"],
+      input[type="number"],
+      input[type="url"] {
+        border-radius: 0.8rem;
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        background: rgba(2, 6, 23, 0.85);
+        padding: 0.75rem 0.9rem;
+        font-size: 0.95rem;
+        color: inherit;
+      }
+
+      .toggle {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.75rem 0.9rem;
+        border-radius: 0.9rem;
+        border: 1px solid rgba(148, 163, 184, 0.3);
+        background: rgba(2, 6, 23, 0.6);
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+      }
+
+      button {
+        border: none;
+        border-radius: 0.9rem;
+        padding: 0.85rem 1rem;
+        font-size: 1rem;
+        font-weight: 600;
+        background: linear-gradient(120deg, #34d399, #22d3ee);
+        color: #0f172a;
+      }
+
+      .status {
+        font-size: 0.85rem;
+        min-height: 1.4rem;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section>
+        <h1>Kalshi Module</h1>
+        <p>Configure how control signals map to Kalshi moneyline orders.</p>
+      </section>
+      <form id="configForm">
+        <label>
+          Relay server URL (https://jester.fly.dev)
+          <input type="url" id="serverUrl" required placeholder="https://jester.fly.dev" />
+        </label>
+        <label class="toggle">
+          <input type="checkbox" id="enabled" />
+          Enable trading module
+        </label>
+        <div class="grid">
+          <label>
+            League (e.g. NBA, NFL)
+            <input type="text" id="league" placeholder="NBA" required />
+          </label>
+        </div>
+        <div class="grid">
+          <label>
+            Home team label
+            <input type="text" id="homeTeam" placeholder="Denver Nuggets" />
+          </label>
+          <label>
+            Away team label
+            <input type="text" id="awayTeam" placeholder="LA Lakers" />
+          </label>
+        </div>
+        <div class="grid">
+          <label>
+            Home team code (matches Kalshi)
+            <input type="text" id="homeCode" placeholder="DEN" />
+          </label>
+          <label>
+            Away team code
+            <input type="text" id="awayCode" placeholder="LAL" />
+          </label>
+        </div>
+        <label>
+          Bet unit size (contracts per press)
+          <input type="number" id="betUnitSize" min="1" step="1" value="1" />
+        </label>
+        <label class="toggle">
+          <input type="checkbox" id="testMode" />
+          Run in test mode (log requests without sending to Kalshi)
+        </label>
+        <button type="submit">Save settings</button>
+        <div class="status" id="status"></div>
+      </form>
+      <section id="testSection" hidden>
+        <h2>Test mode events</h2>
+        <p>Logged requests appear below when test mode is enabled.</p>
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap">
+          <button type="button" id="refreshLog">Refresh log</button>
+          <button type="button" id="clearLog">Clear log</button>
+        </div>
+        <pre id="logOutput">No events yet.</pre>
+      </section>
+    </main>
+    <script>
+      const STORAGE_KEY = 'jester-kalshi-server';
+      const serverInput = document.querySelector('#serverUrl');
+      const form = document.querySelector('#configForm');
+      const statusEl = document.querySelector('#status');
+
+      const enabledInput = document.querySelector('#enabled');
+      const leagueInput = document.querySelector('#league');
+      const homeTeamInput = document.querySelector('#homeTeam');
+      const awayTeamInput = document.querySelector('#awayTeam');
+      const homeCodeInput = document.querySelector('#homeCode');
+      const awayCodeInput = document.querySelector('#awayCode');
+      const unitInput = document.querySelector('#betUnitSize');
+      const testModeInput = document.querySelector('#testMode');
+
+      const testSection = document.querySelector('#testSection');
+      const logOutput = document.querySelector('#logOutput');
+      const refreshBtn = document.querySelector('#refreshLog');
+      const clearBtn = document.querySelector('#clearLog');
+
+      const savedServer = localStorage.getItem(STORAGE_KEY);
+      if (savedServer) {
+        serverInput.value = savedServer;
+        fetchConfig(savedServer);
+      }
+
+      form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        const base = serverInput.value.trim();
+        if (!base) {
+          setStatus('Please enter the relay URL', true);
+          return;
+        }
+
+        localStorage.setItem(STORAGE_KEY, base);
+        const payload = {
+          enabled: enabledInput.checked,
+          league: leagueInput.value,
+          homeTeam: homeTeamInput.value,
+          awayTeam: awayTeamInput.value,
+          homeCode: homeCodeInput.value,
+          awayCode: awayCodeInput.value,
+          betUnitSize: Number(unitInput.value) || 1,
+          testMode: testModeInput.checked
+        };
+
+        fetch(`${base.replace(/\/$/, '')}/config/kalshi`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        })
+          .then((res) => {
+            if (!res.ok) {
+              throw new Error('Unable to save settings');
+            }
+            return res.json();
+          })
+          .then((data) => {
+            populateForm(data);
+            setStatus('Settings saved successfully');
+            maybeFetchLog();
+          })
+          .catch((err) => {
+            setStatus(err.message || 'Failed to save settings', true);
+          });
+      });
+
+      function fetchConfig(baseUrl) {
+        fetch(`${baseUrl.replace(/\/$/, '')}/config/kalshi`)
+          .then((res) => {
+            if (!res.ok) {
+              throw new Error('Unable to load settings');
+            }
+            return res.json();
+          })
+          .then((data) => {
+            populateForm(data);
+            setStatus('Settings loaded');
+            maybeFetchLog();
+          })
+          .catch((err) => {
+            setStatus(err.message || 'Failed to load settings', true);
+          });
+      }
+
+      function populateForm(config) {
+        enabledInput.checked = !!config.enabled;
+        leagueInput.value = config.league ?? '';
+        homeTeamInput.value = config.homeTeam ?? '';
+        awayTeamInput.value = config.awayTeam ?? '';
+        homeCodeInput.value = config.homeCode ?? '';
+        awayCodeInput.value = config.awayCode ?? '';
+        unitInput.value = config.betUnitSize ?? 1;
+        testModeInput.checked = !!config.testMode;
+        testSection.hidden = !testModeInput.checked;
+      }
+
+      function setStatus(message, isError = false) {
+        statusEl.textContent = message;
+        statusEl.style.color = isError ? '#f87171' : '#a5f3fc';
+      }
+
+      function maybeFetchLog() {
+        testSection.hidden = !testModeInput.checked;
+        if (!testModeInput.checked) {
+          return;
+        }
+        refreshLog();
+      }
+
+      function refreshLog() {
+        const base = serverInput.value.trim();
+        if (!base) {
+          logOutput.textContent = 'Enter the relay URL to view logs.';
+          return;
+        }
+        fetch(`${base.replace(/\/$/, '')}/config/kalshi/test`)
+          .then((res) => res.json())
+          .then((data) => {
+            const events = data.events ?? [];
+            if (!events.length) {
+              logOutput.textContent = 'No test events logged yet.';
+              return;
+            }
+            logOutput.textContent = events
+              .map((evt) => {
+                const when = new Date(evt.at).toLocaleTimeString();
+                return `${when} — ${evt.side.toUpperCase()} ${evt.count} @ ${evt.ticker}`;
+              })
+              .join('\n');
+          })
+          .catch(() => {
+            logOutput.textContent = 'Unable to load events.';
+          });
+      }
+
+      function clearLog() {
+        const base = serverInput.value.trim();
+        if (!base) {
+          return;
+        }
+        fetch(`${base.replace(/\/$/, '')}/config/kalshi/test`, { method: 'DELETE' }).then(() => {
+          logOutput.textContent = 'Log cleared.';
+        });
+      }
+
+      refreshBtn.addEventListener('click', refreshLog);
+      clearBtn.addEventListener('click', clearLog);
+      testModeInput.addEventListener('change', maybeFetchLog);
+    </script>
+  </body>
+</html>
