@@ -85,11 +85,6 @@ export async function handleKalshiTrigger(side: TriggerSide, logger: (...args: u
     return { ok: true, skippedReason: 'module-disabled' };
   }
 
-  if (!ACCESS_KEY || !PRIVATE_KEY) {
-    logger('Kalshi disabled: missing API key or private key');
-    return { ok: false, skippedReason: 'missing-credentials', error: 'Missing KALSHI_ACCESS_KEY or KALSHI_PRIVATE_KEY' };
-  }
-
   const ticker = buildMoneylineTicker(cfg, side);
   if (!ticker) {
     logger('Kalshi skipped: insufficient matchup metadata for', side);
@@ -109,6 +104,11 @@ export async function handleKalshiTrigger(side: TriggerSide, logger: (...args: u
     recordTestEvent({ ticker, side, count: cfg.betUnitSize });
     logger('Kalshi test mode: skipping order', ticker);
     return { ok: true, skippedReason: 'test-mode' };
+  }
+
+  if (!ACCESS_KEY || !PRIVATE_KEY) {
+    logger('Kalshi disabled: missing API key or private key');
+    return { ok: false, skippedReason: 'missing-credentials', error: 'Missing KALSHI_ACCESS_KEY or KALSHI_PRIVATE_KEY' };
   }
 
   try {
