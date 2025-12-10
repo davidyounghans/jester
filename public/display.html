@@ -124,6 +124,7 @@
       const serverInput = document.querySelector('#serverInput');
 
       let link = null;
+      let resetTimer = null;
       const savedUrl = localStorage.getItem(STORAGE_KEY);
       if (savedUrl) {
         serverInput.value = savedUrl;
@@ -163,6 +164,23 @@
         document.body.classList.remove('flash');
         void document.body.offsetWidth; // restart animation
         document.body.classList.add('flash');
+        scheduleReset();
+      }
+
+      function scheduleReset() {
+        if (resetTimer) {
+          clearTimeout(resetTimer);
+        }
+        resetTimer = setTimeout(() => {
+          resetTimer = null;
+          resetDisplay();
+        }, 3000);
+      }
+
+      function resetDisplay() {
+        messageEl.textContent = 'Waiting…';
+        delete document.body.dataset.side;
+        document.body.classList.remove('flash');
       }
 
       window.addEventListener('beforeunload', () => link?.dispose());

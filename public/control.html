@@ -194,8 +194,26 @@
         }
       }
 
-      homeBtn.addEventListener('click', () => link?.trigger('home'));
-      awayBtn.addEventListener('click', () => link?.trigger('away'));
+      homeBtn.addEventListener('click', () => {
+        vibrateOnce();
+        link?.trigger('home');
+      });
+      awayBtn.addEventListener('click', () => {
+        vibrateTwice();
+        link?.trigger('away');
+      });
+
+      function vibrateOnce() {
+        if (navigator.vibrate) {
+          navigator.vibrate(40);
+        }
+      }
+
+      function vibrateTwice() {
+        if (navigator.vibrate) {
+          navigator.vibrate([40, 60, 40]);
+        }
+      }
 
       window.addEventListener('beforeunload', () => link?.dispose());
     </script>
