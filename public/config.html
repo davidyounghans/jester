@@ -144,6 +144,14 @@
           <input type="checkbox" id="testMode" />
           Run in test mode (log requests without sending to Kalshi)
         </label>
+        <label class="toggle">
+          <input type="checkbox" id="moneylineEnabled" checked />
+          Enable moneyline bets
+        </label>
+        <label class="toggle">
+          <input type="checkbox" id="spreadEnabled" />
+          Enable spread bets (choose spread priced near 40-60¢)
+        </label>
         <button type="submit">Save settings</button>
         <div class="status" id="status"></div>
       </form>
@@ -171,6 +179,8 @@
       const awayCodeInput = document.querySelector('#awayCode');
       const unitInput = document.querySelector('#betUnitSize');
       const testModeInput = document.querySelector('#testMode');
+      const moneylineEnabledInput = document.querySelector('#moneylineEnabled');
+      const spreadEnabledInput = document.querySelector('#spreadEnabled');
 
       const testSection = document.querySelector('#testSection');
       const logOutput = document.querySelector('#logOutput');
@@ -200,6 +210,8 @@
           homeCode: homeCodeInput.value,
           awayCode: awayCodeInput.value,
           betUnitSize: Number(unitInput.value) || 1,
+          moneylineEnabled: moneylineEnabledInput.checked,
+          spreadEnabled: spreadEnabledInput.checked,
           testMode: testModeInput.checked
         };
 
@@ -251,6 +263,8 @@
         awayCodeInput.value = config.awayCode ?? '';
         unitInput.value = config.betUnitSize ?? 1;
         testModeInput.checked = !!config.testMode;
+        moneylineEnabledInput.checked = config.moneylineEnabled ?? true;
+        spreadEnabledInput.checked = config.spreadEnabled ?? false;
         testSection.hidden = !testModeInput.checked;
       }
 
@@ -284,9 +298,11 @@
             logOutput.textContent = events
               .map((evt) => {
                 const when = new Date(evt.at).toLocaleTimeString();
-                return `${when} — ${evt.side.toUpperCase()} ${evt.count} @ ${evt.ticker}`;
+                const body = evt.body ? JSON.stringify(evt.body, null, 2) : '';
+                const header = `${when} — ${evt.side?.toUpperCase?.() ?? ''} ${evt.count} @ ${evt.ticker}`;
+                return body ? `${header}\n${body}` : header;
               })
-              .join('\n');
+              .join('\n\n');
           })
           .catch(() => {
             logOutput.textContent = 'Unable to load events.';

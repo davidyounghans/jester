@@ -71,10 +71,10 @@ Each API request is signed (RSA-PSS) using the private key, so Kalshi only sees 
 1. Deploy/serve `public/config.html` just like the other static pages.
 2. Paste the relay URL (e.g. `https://jester.fly.dev`) into the top field and load settings.
 3. Provide the league code (e.g. `NBA`), the team names you want to see in the UI, and their Kalshi codes (e.g. `DEN`, `LAL`). Set the bet unit size.
-4. Toggle **Enable trading module** and save. Settings persist on the relay host (in `kalshi.config.json` unless you override the path).
-5. Use **Test mode** to dry-run: when checked, trades are not sent to Kalshi. Logged requests appear in the Test Events box, so you can confirm the derived tickers before flipping test mode off.
+4. Toggle **Enable trading module** and choose whether to place **moneyline** and/or **spread** bets. Settings persist on the relay host (in `kalshi.config.json` unless you override the path).
+5. Use **Test mode** to dry-run: when checked, trades are not sent to Kalshi. Logged requests (full JSON payloads) appear in the Test Events box, so you can confirm derived tickers before flipping test mode off.
 
-During runtime, pressing **Home** or **Away** still updates the display instantly; additionally the server derives the moneyline ticker from the stored league/team codes and submits a limit order (50¢ bid) for that contract/quantity. Cancel actions never place trades. If credentials or metadata are missing, the module logs the issue and skips the trade without affecting the display UX.
+During runtime, pressing **Home** or **Away** still updates the display instantly; additionally the server derives tickers from the stored league/team codes and, depending on your toggles, submits market orders for moneyline and/or spread. Spread selection picks the contract whose current price is between 40–60¢ (or closest to 50¢). Cancel actions never place trades. If credentials or metadata are missing, the module logs the issue and skips the trade without affecting the display UX.
 
 ## Deployment strategy
 

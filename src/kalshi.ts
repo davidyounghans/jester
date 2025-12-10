@@ -6,6 +6,8 @@ type TriggerSide = 'home' | 'away' | 'cancel';
 
 export interface KalshiConfig {
   enabled: boolean;
+  moneylineEnabled: boolean;
+  spreadEnabled: boolean;
   league: string;
   homeTeam: string;
   homeCode: string;
@@ -33,6 +35,8 @@ const PRIVATE_KEY = process.env.KALSHI_PRIVATE_KEY ?? '';
 
 const defaultConfig: KalshiConfig = {
   enabled: false,
+  moneylineEnabled: true,
+  spreadEnabled: false,
   league: '',
   homeTeam: '',
   homeCode: '',
@@ -43,7 +47,7 @@ const defaultConfig: KalshiConfig = {
 };
 
 let runtimeConfig: KalshiConfig = loadConfigFromDisk();
-const testEventLog: Array<{ at: number; side: TriggerSide; ticker: string; count: number }> = [];
+const testEventLog: Array<{ at: number; side: TriggerSide; ticker: string; count: number; body: unknown }> = [];
 
 export function getKalshiConfig(): KalshiConfig {
   return runtimeConfig;
@@ -53,6 +57,8 @@ export function updateKalshiConfig(partial: Partial<KalshiConfig>): KalshiConfig
   const next: KalshiConfig = {
     ...runtimeConfig,
     ...partial,
+    moneylineEnabled: partial.moneylineEnabled ?? runtimeConfig.moneylineEnabled,
+    spreadEnabled: partial.spreadEnabled ?? runtimeConfig.spreadEnabled,
     betUnitSize: normalizeUnitSize(partial.betUnitSize ?? runtimeConfig.betUnitSize),
     league: sanitizeToken(partial.league ?? runtimeConfig.league),
     homeTeam: (partial.homeTeam ?? runtimeConfig.homeTeam).trim(),
@@ -85,46 +91,21 @@ export async function handleKalshiTrigger(side: TriggerSide, logger: (...args: u
     return { ok: true, skippedReason: 'module-disabled' };
   }
 
-  const ticker = buildMoneylineTicker(cfg, side);
-  if (!ticker) {
-    logger('Kalshi skipped: insufficient matchup metadata for', side);
-    return { ok: true, skippedReason: 'missing-ticker' };
+  const results: KalshiResult[] = [];
+
+  if (cfg.moneylineEnabled) {
+    results.push(await placeMoneyline(cfg, side, logger));
   }
 
-  const orderBody = {
-    ticker,
-    side: 'yes',
-    action: 'buy',
-    count: cfg.betUnitSize,
-    type: 'limit',
-    yes_price: 50
-  };
-
-  if (cfg.testMode) {
-    recordTestEvent({ ticker, side, count: cfg.betUnitSize });
-    logger('Kalshi test mode: skipping order', ticker);
-    return { ok: true, skippedReason: 'test-mode' };
+  if (cfg.spreadEnabled) {
+    results.push(await placeSpread(cfg, side, logger));
   }
 
-  if (!ACCESS_KEY || !PRIVATE_KEY) {
-    logger('Kalshi disabled: missing API key or private key');
-    return { ok: false, skippedReason: 'missing-credentials', error: 'Missing KALSHI_ACCESS_KEY or KALSHI_PRIVATE_KEY' };
+  if (results.length === 0) {
+    return { ok: true, skippedReason: 'no-modules-enabled' };
   }
 
-  try {
-    const response = await signedFetch('/portfolio/orders', 'POST', orderBody);
-    if (!response.ok) {
-      const text = await safeReadText(response);
-      logger('Kalshi order rejected', response.status, text);
-      return { ok: false, error: `Kalshi request failed (${response.status})` };
-    }
-
-    logger('Kalshi order placed', ticker, cfg.betUnitSize);
-    return { ok: true };
-  } catch (error) {
-    logger('Kalshi request error', error);
-    return { ok: false, error: (error as Error).message };
-  }
+  return results.every((r) => r.ok) ? { ok: true } : { ok: false, error: 'one-or-more-orders-failed' };
 }
 
 async function signedFetch(pathname: string, method: string, body: unknown): Promise<Response> {
@@ -215,9 +196,183 @@ function buildMoneylineTicker(config: KalshiConfig, side: TriggerSide) {
   return `${league}.${awayCode}.${homeCode}.ML.${suffix}`;
 }
 
-function recordTestEvent(event: { ticker: string; side: TriggerSide; count: number }) {
+function recordTestEvent(event: { ticker: string; side: TriggerSide; count: number; body: unknown }) {
   testEventLog.push({ ...event, at: Date.now() });
   if (testEventLog.length > 100) {
     testEventLog.splice(0, testEventLog.length - 100);
   }
+}
+
+async function placeMoneyline(cfg: KalshiConfig, side: TriggerSide, logger: (...args: unknown[]) => void): Promise<KalshiResult> {
+  const ticker = buildMoneylineTicker(cfg, side);
+  if (!ticker) {
+    logger('Kalshi skipped: insufficient matchup metadata for moneyline', side);
+    return { ok: true, skippedReason: 'missing-ticker' };
+  }
+
+  const orderBody = {
+    ticker,
+    side: 'yes',
+    action: 'buy',
+    count: cfg.betUnitSize,
+    type: 'market'
+  };
+
+  if (cfg.testMode) {
+    recordTestEvent({ ticker, side, count: cfg.betUnitSize, body: orderBody });
+    logger('Kalshi test mode: skipping moneyline order', ticker);
+    return { ok: true, skippedReason: 'test-mode' };
+  }
+
+  if (!ACCESS_KEY || !PRIVATE_KEY) {
+    logger('Kalshi disabled: missing API key or private key');
+    return { ok: false, skippedReason: 'missing-credentials', error: 'Missing KALSHI_ACCESS_KEY or KALSHI_PRIVATE_KEY' };
+  }
+
+  try {
+    const response = await signedFetch('/portfolio/orders', 'POST', orderBody);
+    if (!response.ok) {
+      const text = await safeReadText(response);
+      logger('Kalshi moneyline rejected', response.status, text);
+      return { ok: false, error: `Kalshi request failed (${response.status})` };
+    }
+
+    logger('Kalshi moneyline placed', ticker, cfg.betUnitSize);
+    return { ok: true };
+  } catch (error) {
+    logger('Kalshi moneyline error', error);
+    return { ok: false, error: (error as Error).message };
+  }
+}
+
+async function placeSpread(cfg: KalshiConfig, side: TriggerSide, logger: (...args: unknown[]) => void): Promise<KalshiResult> {
+  const eventTicker = buildEventTicker(cfg);
+  if (!eventTicker) {
+    logger('Kalshi skipped: missing event ticker for spread');
+    return { ok: true, skippedReason: 'missing-event-ticker' };
+  }
+
+  const sideCode = side === 'home' ? 'H' : 'A';
+  let chosenTicker: string | null = null;
+  let chosenPrice: number | null = null;
+
+  if (!cfg.testMode && (!ACCESS_KEY || !PRIVATE_KEY)) {
+    logger('Kalshi spread disabled: missing credentials');
+    return { ok: false, skippedReason: 'missing-credentials', error: 'Missing KALSHI_ACCESS_KEY or KALSHI_PRIVATE_KEY' };
+  }
+
+  try {
+    if (cfg.testMode && (!ACCESS_KEY || !PRIVATE_KEY)) {
+      const fallbackTicker = `${eventTicker}.SP.${sideCode}`;
+      recordTestEvent({
+        ticker: fallbackTicker,
+        side,
+        count: cfg.betUnitSize,
+        body: { note: 'test-mode no credentials; markets not fetched' }
+      });
+      logger('Kalshi test mode: logged spread without credentials', fallbackTicker);
+      return { ok: true, skippedReason: 'test-mode-no-creds' };
+    }
+
+    const markets = await fetchMarketsByEvent(eventTicker, logger);
+    const candidates = markets.filter((m) => m.ticker?.includes('.SP.') && m.ticker?.includes(`.${sideCode}.`));
+    const scored = candidates
+      .map((m) => {
+        const price = pickPrice(m);
+        return { ticker: m.ticker, price };
+      })
+      .filter((m) => m.ticker && m.price !== null) as Array<{ ticker: string; price: number }>;
+
+    if (scored.length === 0) {
+      logger('Kalshi spread skipped: no spreads found');
+      return { ok: true, skippedReason: 'no-spreads' };
+    }
+
+    const inBand = scored.filter((s) => s.price >= 40 && s.price <= 60);
+    const pick = (inBand.length ? inBand : scored).reduce((best, cur) => {
+      const target = Math.abs(cur.price - 50);
+      const bestScore = Math.abs(best.price - 50);
+      return target < bestScore ? cur : best;
+    });
+
+    chosenTicker = pick.ticker;
+    chosenPrice = pick.price;
+
+    const orderBody = {
+      ticker: chosenTicker,
+      side: 'yes',
+      action: 'buy',
+      count: cfg.betUnitSize,
+      type: 'market'
+    };
+
+    if (cfg.testMode) {
+      recordTestEvent({
+        ticker: chosenTicker,
+        side,
+        count: cfg.betUnitSize,
+        body: { ...orderBody, observed_price: chosenPrice }
+      });
+      logger('Kalshi test mode: skipping spread order', chosenTicker);
+      return { ok: true, skippedReason: 'test-mode' };
+    }
+
+    const response = await signedFetch('/portfolio/orders', 'POST', orderBody);
+    if (!response.ok) {
+      const text = await safeReadText(response);
+      logger('Kalshi spread rejected', response.status, text);
+      return { ok: false, error: `Kalshi request failed (${response.status})` };
+    }
+
+    logger('Kalshi spread placed', chosenTicker, cfg.betUnitSize, 'at~', chosenPrice);
+    return { ok: true };
+  } catch (error) {
+    logger('Kalshi spread error', error);
+    return { ok: false, error: (error as Error).message };
+  }
+}
+
+function buildEventTicker(config: KalshiConfig) {
+  if (!config.league || !config.homeCode || !config.awayCode) {
+    return null;
+  }
+  const league = sanitizeToken(config.league);
+  const homeCode = sanitizeToken(config.homeCode);
+  const awayCode = sanitizeToken(config.awayCode);
+  if (!league || !homeCode || !awayCode) {
+    return null;
+  }
+  return `${league}.${awayCode}.${homeCode}`;
+}
+
+async function fetchMarketsByEvent(eventTicker: string, logger: (...args: unknown[]) => void) {
+  const url = `/markets?event_ticker=${encodeURIComponent(eventTicker)}&status=open`;
+  const res = await signedFetch(url, 'GET', '');
+  if (!res.ok) {
+    const text = await safeReadText(res);
+    logger('Kalshi markets fetch failed', res.status, text);
+    throw new Error(`markets-fetch-failed:${res.status}`);
+  }
+  const json = (await res.json()) as { markets?: Array<{ ticker: string; yes_bid?: number; yes_ask?: number; last_price?: number }> };
+  return json.markets ?? [];
+}
+
+function pickPrice(market: { yes_bid?: number; yes_ask?: number; last_price?: number }): number | null {
+  const bid = coerceNum(market.yes_bid);
+  const ask = coerceNum(market.yes_ask);
+  const last = coerceNum(market.last_price);
+  if (bid !== null && ask !== null) {
+    return Math.round((bid + ask) / 2);
+  }
+  if (bid !== null) return bid;
+  if (ask !== null) return ask;
+  if (last !== null) return last;
+  return null;
+}
+
+function coerceNum(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  return null;
 }

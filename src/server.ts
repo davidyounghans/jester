@@ -41,6 +41,8 @@ const clients = new Map<WebSocket, ClientRecord>();
 
 const kalshiConfigPayload = z.object({
   enabled: z.coerce.boolean().optional(),
+  moneylineEnabled: z.coerce.boolean().optional(),
+  spreadEnabled: z.coerce.boolean().optional(),
   league: z.string().max(32).optional(),
   homeTeam: z.string().max(120).optional(),
   awayTeam: z.string().max(120).optional(),
