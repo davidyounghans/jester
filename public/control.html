@@ -210,7 +210,7 @@
         link?.trigger('away');
       });
       cancelBtn.addEventListener('click', () => {
-        vibrateOnce();
+        vibrateLong();
         link?.trigger('cancel');
       });
 
@@ -223,6 +223,12 @@
       function vibrateTwice() {
         if (navigator.vibrate) {
           navigator.vibrate([60, 200, 60]);
+        }
+      }
+
+      function vibrateLong() {
+        if (navigator.vibrate) {
+          navigator.vibrate(120);
         }
       }
 
