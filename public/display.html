@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Jester Display</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Roboto", sans-serif;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: #0f172a;
+        color: #f8fafc;
+        transition: background 180ms ease;
+      }
+
+      body[data-side='home'] {
+        background: radial-gradient(circle at top, rgba(251, 191, 36, 0.6), rgba(15, 23, 42, 1));
+      }
+
+      body[data-side='away'] {
+        background: radial-gradient(circle at top, rgba(16, 185, 129, 0.6), rgba(15, 23, 42, 1));
+      }
+
+      body.flash {
+        animation: pulse 600ms ease;
+      }
+
+      @keyframes pulse {
+        0% {
+          transform: scale(1);
+        }
+        40% {
+          transform: scale(1.03);
+        }
+        100% {
+          transform: scale(1);
+        }
+      }
+
+      main {
+        width: 100%;
+        max-width: 400px;
+        padding: 0 1.5rem;
+        text-align: center;
+      }
+
+      h1 {
+        margin: 0 0 0.5rem;
+        font-size: 1.25rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        opacity: 0.85;
+      }
+
+      .message {
+        font-size: clamp(3rem, 15vw, 6rem);
+        font-weight: 800;
+        letter-spacing: 0.1em;
+        margin: 0.5rem 0 1rem;
+      }
+
+      .status {
+        font-size: 0.9rem;
+        opacity: 0.75;
+      }
+
+      form {
+        margin-top: 2rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+      }
+
+      input[type='url'] {
+        border-radius: 0.75rem;
+        border: 1px solid rgba(248, 250, 252, 0.2);
+        background: rgba(15, 23, 42, 0.6);
+        padding: 0.85rem 1rem;
+        color: inherit;
+        font-size: 1rem;
+      }
+
+      button {
+        padding: 0.75rem 1.2rem;
+        border-radius: 0.75rem;
+        border: none;
+        background: rgba(248, 250, 252, 0.9);
+        color: #0f172a;
+        font-weight: 600;
+        font-size: 1rem;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Jester Display</h1>
+      <div class="message" id="message">Waiting…</div>
+      <p class="status">
+        Connection:
+        <span id="connectionStatus">idle</span>
+      </p>
+      <form id="serverForm">
+        <label for="serverInput">Realtime server URL (wss://...)</label>
+        <input type="url" id="serverInput" name="server" placeholder="wss://example.com" required />
+        <button type="submit">Connect</button>
+      </form>
+    </main>
+    <script type="module">
+      import { RealtimeLink, normalizeServerUrl } from './js/realtime.js';
+
+      const STORAGE_KEY = 'jester-server-url';
+      const messageEl = document.querySelector('#message');
+      const statusEl = document.querySelector('#connectionStatus');
+      const serverForm = document.querySelector('#serverForm');
+      const serverInput = document.querySelector('#serverInput');
+
+      let link = null;
+      const savedUrl = localStorage.getItem(STORAGE_KEY);
+      if (savedUrl) {
+        serverInput.value = savedUrl;
+        connect(savedUrl);
+      }
+
+      serverForm.addEventListener('submit', (event) => {
+        event.preventDefault();
+        connect(serverInput.value.trim());
+      });
+
+      function connect(rawUrl) {
+        const normalized = normalizeServerUrl(rawUrl);
+        if (!normalized) {
+          updateStatus('invalid-url');
+          return;
+        }
+
+        localStorage.setItem(STORAGE_KEY, normalized);
+        link?.dispose();
+        link = new RealtimeLink({
+          role: 'display',
+          serverUrl: normalized,
+          onStatus: updateStatus,
+          onFlash: handleFlash
+        });
+      }
+
+      function updateStatus(text) {
+        statusEl.textContent = text;
+      }
+
+      function handleFlash(payload) {
+        const side = payload.side === 'home' ? 'HOME' : 'AWAY';
+        messageEl.textContent = side;
+        document.body.dataset.side = payload.side;
+        document.body.classList.remove('flash');
+        void document.body.offsetWidth; // restart animation
+        document.body.classList.add('flash');
+      }
+
+      window.addEventListener('beforeunload', () => link?.dispose());
+    </script>
+  </body>
+</html>
