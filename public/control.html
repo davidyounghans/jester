@@ -44,6 +44,16 @@
         background-position: center;
         background-repeat: no-repeat;
         padding: 0;
+        isolation: isolate;
+      }
+
+      .tile::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.28);
+        pointer-events: none;
+        z-index: 1;
       }
 
       .tile:disabled {
