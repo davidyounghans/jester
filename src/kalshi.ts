@@ -29,7 +29,8 @@ const CONFIG_PATH = process.env.KALSHI_CONFIG_PATH
   ? path.resolve(process.env.KALSHI_CONFIG_PATH)
   : path.resolve(process.cwd(), 'kalshi.config.json');
 
-const API_BASE = process.env.KALSHI_API_BASE ?? 'https://trading-api.kalshi.com';
+// Default to the current Kalshi API base (v2); override via KALSHI_API_BASE if needed.
+const API_BASE = process.env.KALSHI_API_BASE ?? 'https://api.elections.kalshi.com/trade-api/v2';
 const ACCESS_KEY = process.env.KALSHI_ACCESS_KEY ?? process.env.KALSHI_API_KEY;
 const PRIVATE_KEY = process.env.KALSHI_PRIVATE_KEY ?? '';
 
