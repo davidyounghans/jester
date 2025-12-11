@@ -267,6 +267,14 @@ async function placeSpread(cfg: KalshiConfig, side: TriggerSide, logger: (...arg
 
   if (!cfg.testMode && (!ACCESS_KEY || !PRIVATE_KEY)) {
     logger('Kalshi spread disabled: missing credentials');
+    if (cfg.testMode) {
+      recordTestEvent({
+        ticker: 'unknown',
+        side,
+        count: cfg.betUnitSize,
+        body: { note: 'spread skipped: missing credentials' }
+      });
+    }
     return { ok: false, skippedReason: 'missing-credentials', error: 'Missing KALSHI_ACCESS_KEY or KALSHI_PRIVATE_KEY' };
   }
 
@@ -353,6 +361,14 @@ async function placeSpread(cfg: KalshiConfig, side: TriggerSide, logger: (...arg
     return { ok: true };
   } catch (error) {
     logger('Kalshi spread error', error);
+    if (cfg.testMode) {
+      recordTestEvent({
+        ticker: chosenTicker ?? eventTicker ?? 'unknown',
+        side,
+        count: cfg.betUnitSize,
+        body: { note: 'spread error', error: (error as Error).message }
+      });
+    }
     return { ok: false, error: (error as Error).message };
   }
 }
