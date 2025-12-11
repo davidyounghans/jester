@@ -8,7 +8,9 @@ export interface KalshiConfig {
   enabled: boolean;
   moneylineEnabled: boolean;
   spreadEnabled: boolean;
-  league: string;
+  sport: string; // e.g., Basketball
+  competition: string; // e.g., Pro Basketball (M)
+  scope: string; // e.g., Games
   homeTeam: string;
   homeCode: string;
   awayTeam: string;
@@ -39,7 +41,9 @@ const defaultConfig: KalshiConfig = {
   enabled: false,
   moneylineEnabled: true,
   spreadEnabled: false,
-  league: '',
+  sport: 'Basketball',
+  competition: 'Pro Basketball (M)',
+  scope: 'Games',
   homeTeam: '',
   homeCode: '',
   awayTeam: '',
@@ -60,6 +64,7 @@ const liveEventLog: Array<{
   responseBody?: string;
   error?: string;
   note?: string;
+  details?: unknown;
 }> = [];
 
 export function getKalshiConfig(): KalshiConfig {
@@ -73,7 +78,9 @@ export function updateKalshiConfig(partial: Partial<KalshiConfig>): KalshiConfig
     moneylineEnabled: partial.moneylineEnabled ?? runtimeConfig.moneylineEnabled,
     spreadEnabled: partial.spreadEnabled ?? runtimeConfig.spreadEnabled,
     betUnitSize: normalizeUnitSize(partial.betUnitSize ?? runtimeConfig.betUnitSize),
-    league: sanitizeToken(partial.league ?? runtimeConfig.league),
+    sport: (partial.sport ?? runtimeConfig.sport).trim(),
+    competition: (partial.competition ?? runtimeConfig.competition).trim(),
+    scope: (partial.scope ?? runtimeConfig.scope).trim(),
     homeTeam: (partial.homeTeam ?? runtimeConfig.homeTeam).trim(),
     awayTeam: (partial.awayTeam ?? runtimeConfig.awayTeam).trim(),
     homeCode: sanitizeToken(partial.homeCode ?? runtimeConfig.homeCode),
@@ -235,6 +242,7 @@ function recordLiveEvent(event: {
   responseBody?: string;
   error?: string;
   note?: string;
+  details?: unknown;
 }) {
   liveEventLog.push({ ...event, at: Date.now() });
   if (liveEventLog.length > 100) {
@@ -243,38 +251,54 @@ function recordLiveEvent(event: {
 }
 
 async function placeMoneyline(cfg: KalshiConfig, side: TriggerSide, logger: (...args: unknown[]) => void): Promise<KalshiResult> {
-  const league = sanitizeToken(cfg.league);
+  const sport = cfg.sport.trim();
+  const competition = cfg.competition.trim();
+  const scope = cfg.scope.trim();
   const homeCode = sanitizeToken(cfg.homeCode);
   const awayCode = sanitizeToken(cfg.awayCode);
-  if (!league || !homeCode || !awayCode) {
+  if (!sport || !competition || !scope || !homeCode || !awayCode) {
     logger('Kalshi skipped: insufficient matchup metadata for moneyline', side);
     return { ok: true, skippedReason: 'missing-ticker' };
   }
 
   const sideCode = side === 'home' ? 'H' : 'A';
 
-  // Fetch all open markets for the league and pick the ML ticker containing both team codes.
-  const markets = await fetchOpenMarkets(league, logger);
+  // Fetch all open markets for the sport/competition/scope and pick the ML ticker containing both team codes.
+  const markets = await fetchOpenMarkets({ sport, competition, scope }, logger);
   if (!markets.length) {
-    logger('Kalshi moneyline skipped: no markets found for league', league);
-    recordLiveEvent({ side, kind: 'moneyline', ticker: null, count: cfg.betUnitSize, note: 'no-markets' });
-    return { ok: true, skippedReason: 'no-markets' };
-  }
-
-  const mlCandidates = markets.filter((m) => {
-    const ticker = m.ticker ?? '';
-    const segments = normalizeSegments(ticker);
-    return hasTeamCodes(ticker, homeCode, awayCode) && isMoneyline(segments) && hasSide(segments, sideCode);
-  });
-  const ticker = mlCandidates[0]?.ticker ?? null;
-  if (!ticker) {
-    logger('Kalshi moneyline skipped: no ML market found for teams', homeCode, awayCode, 'side', sideCode);
+    logger('Kalshi moneyline skipped: no markets found for sport/competition/scope', sport, competition, scope);
     recordLiveEvent({
       side,
       kind: 'moneyline',
       ticker: null,
       count: cfg.betUnitSize,
-      note: `no-moneyline-market (${homeCode}/${awayCode})`
+      note: 'no-markets',
+      details: { sample: markets.slice(0, 5).map((m) => m.ticker).filter(Boolean) }
+    });
+    return { ok: true, skippedReason: 'no-markets' };
+  }
+
+  const mlCandidates = markets
+    .map((m) => {
+      const ticker = m.ticker ?? '';
+      const segments = normalizeSegments(ticker);
+      return { ticker, segments, sideSeg: extractSide(segments) };
+    })
+    .filter((m) => hasTeamCodes(m.ticker, homeCode, awayCode) && isMoneyline(m.segments) && m.sideSeg === sideCode);
+
+  // Prefer candidates sorted by ticker (stable) so we have deterministic pick.
+  mlCandidates.sort((a, b) => a.ticker.localeCompare(b.ticker));
+  const ticker = mlCandidates[0]?.ticker ?? null;
+  if (!ticker) {
+    logger('Kalshi moneyline skipped: no ML market found for teams', homeCode, awayCode, 'side', sideCode);
+    const pairMarkets = markets.filter((m) => hasTeamCodes(m.ticker ?? '', homeCode, awayCode)).slice(0, 5).map((m) => m.ticker);
+    recordLiveEvent({
+      side,
+      kind: 'moneyline',
+      ticker: null,
+      count: cfg.betUnitSize,
+      note: `no-moneyline-market (${homeCode}/${awayCode})`,
+      details: { pairMarkets, sample: markets.slice(0, 5).map((m) => m.ticker).filter(Boolean) }
     });
     return { ok: true, skippedReason: 'no-moneyline' };
   }
@@ -326,10 +350,12 @@ async function placeMoneyline(cfg: KalshiConfig, side: TriggerSide, logger: (...
 }
 
 async function placeSpread(cfg: KalshiConfig, side: TriggerSide, logger: (...args: unknown[]) => void): Promise<KalshiResult> {
-  const league = sanitizeToken(cfg.league);
+  const sport = cfg.sport.trim();
+  const competition = cfg.competition.trim();
+  const scope = cfg.scope.trim();
   const homeCode = sanitizeToken(cfg.homeCode);
   const awayCode = sanitizeToken(cfg.awayCode);
-  if (!league || !homeCode || !awayCode) {
+  if (!sport || !competition || !scope || !homeCode || !awayCode) {
     logger('Kalshi skipped: missing matchup metadata for spread');
     if (cfg.testMode) {
       recordTestEvent({
@@ -361,7 +387,7 @@ async function placeSpread(cfg: KalshiConfig, side: TriggerSide, logger: (...arg
 
   try {
     if (cfg.testMode && (!ACCESS_KEY || !PRIVATE_KEY)) {
-      const fallbackTicker = `${league}.${awayCode}.${homeCode}.SP.${sideCode}`;
+      const fallbackTicker = `${sport}.${awayCode}.${homeCode}.SP.${sideCode}`;
       recordTestEvent({
         ticker: fallbackTicker,
         side,
@@ -372,12 +398,12 @@ async function placeSpread(cfg: KalshiConfig, side: TriggerSide, logger: (...arg
       return { ok: true, skippedReason: 'test-mode-no-creds' };
     }
 
-    const markets = await fetchOpenMarkets(league, logger);
+    const markets = await fetchOpenMarkets({ sport, competition, scope }, logger);
     if (!markets.length) {
-      logger('Kalshi spread skipped: no markets found for league', league);
+      logger('Kalshi spread skipped: no markets found for sport/competition/scope', sport, competition, scope);
       if (cfg.testMode) {
         recordTestEvent({
-          ticker: `${league}.${awayCode}.${homeCode}`,
+          ticker: `${sport}.${competition}.${scope}`,
           side,
           count: cfg.betUnitSize,
           body: { note: 'spread skipped: no markets found' }
@@ -388,19 +414,22 @@ async function placeSpread(cfg: KalshiConfig, side: TriggerSide, logger: (...arg
         kind: 'spread',
         ticker: null,
         count: cfg.betUnitSize,
-        note: 'no-markets'
+        note: 'no-markets',
+        details: { sample: markets.slice(0, 5).map((m) => m.ticker).filter(Boolean) }
       });
       return { ok: true, skippedReason: 'no-markets' };
     }
 
-    const candidates = markets.filter((m) => {
-      const ticker = m.ticker ?? '';
-      const segments = normalizeSegments(ticker);
-      return hasTeamCodes(ticker, homeCode, awayCode) && isSpread(segments) && hasSide(segments, sideCode);
-    });
+    const candidates = markets
+      .map((m) => {
+        const ticker = m.ticker ?? '';
+        const segments = normalizeSegments(ticker);
+        return { ticker, segments, sideSeg: extractSide(segments), market: m };
+      })
+      .filter((m) => hasTeamCodes(m.ticker, homeCode, awayCode) && isSpread(m.segments) && m.sideSeg === sideCode);
     const scored = candidates
       .map((m) => {
-        const price = pickPrice(m);
+        const price = pickPrice(m.market);
         return { ticker: m.ticker, price };
       })
       .filter((m) => m.ticker && m.price !== null) as Array<{ ticker: string; price: number }>;
@@ -409,12 +438,26 @@ async function placeSpread(cfg: KalshiConfig, side: TriggerSide, logger: (...arg
       logger('Kalshi spread skipped: no spreads found');
       if (cfg.testMode) {
         recordTestEvent({
-          ticker: `${league}.${awayCode}.${homeCode}`,
-          side,
-          count: cfg.betUnitSize,
-          body: { note: 'spread skipped: no spreads found' }
+        ticker: `${sport}.${competition}.${scope}`,
+        side,
+        count: cfg.betUnitSize,
+        body: { note: 'spread skipped: no spreads found' }
         });
       }
+      recordLiveEvent({
+        side,
+        kind: 'spread',
+        ticker: null,
+        count: cfg.betUnitSize,
+        note: 'no-spreads',
+        details: {
+          pairMarkets: markets
+            .filter((m) => hasTeamCodes(m.ticker ?? '', homeCode, awayCode))
+            .slice(0, 5)
+            .map((m) => m.ticker),
+          sample: markets.slice(0, 5).map((m) => m.ticker).filter(Boolean)
+        }
+      });
       return { ok: true, skippedReason: 'no-spreads' };
     }
 
@@ -471,32 +514,47 @@ async function placeSpread(cfg: KalshiConfig, side: TriggerSide, logger: (...arg
       return { ok: false, error: `Kalshi request failed (${response.status})` };
     }
 
-    logger('Kalshi spread placed', chosenTicker, cfg.betUnitSize, 'at~', chosenPrice);
-    recordLiveEvent({ side, kind: 'spread', ticker: chosenTicker, count: cfg.betUnitSize, status: response.status, note: `price~${chosenPrice}` });
-    return { ok: true };
-  } catch (error) {
-    const message = (error as Error).message ?? 'spread-error';
-    logger('Kalshi spread error', message);
-    recordLiveEvent({ side, kind: 'spread', ticker: chosenTicker, count: cfg.betUnitSize, error: message });
-    if (cfg.testMode) {
-      recordTestEvent({
-        ticker: chosenTicker ?? 'unknown',
-        side,
-        count: cfg.betUnitSize,
-        body: { note: 'spread error', error: message }
-      });
+      logger('Kalshi spread placed', chosenTicker, cfg.betUnitSize, 'at~', chosenPrice);
+      recordLiveEvent({ side, kind: 'spread', ticker: chosenTicker, count: cfg.betUnitSize, status: response.status, note: `price~${chosenPrice}` });
+      return { ok: true };
+    } catch (error) {
+      const message = (error as Error).message ?? 'spread-error';
+      logger('Kalshi spread error', message);
+      recordLiveEvent({ side, kind: 'spread', ticker: chosenTicker, count: cfg.betUnitSize, error: message });
+      if (cfg.testMode) {
+        recordTestEvent({
+          ticker: chosenTicker ?? 'unknown',
+          side,
+          count: cfg.betUnitSize,
+          body: { note: 'spread error', error: message }
+        });
+      }
+      return { ok: false, error: message };
     }
-    return { ok: false, error: message };
   }
-}
 
-async function fetchOpenMarkets(league: string, logger: (...args: unknown[]) => void) {
-  const url = `/markets?league=${encodeURIComponent(league)}&status=open&limit=500`;
+async function fetchOpenMarkets(
+  params: { sport: string; competition: string; scope: string },
+  logger: (...args: unknown[]) => void
+) {
+  const now = Date.now();
+  const start = new Date(now - 24 * 60 * 60 * 1000).toISOString(); // yesterday
+  const end = new Date(now + 7 * 24 * 60 * 60 * 1000).toISOString(); // next 7 days
+  const qs = new URLSearchParams();
+  qs.set('type', 'sports');
+  qs.set('status', 'open');
+  qs.set('limit', '500');
+  qs.set('sport', params.sport);
+  qs.set('competition', params.competition);
+  qs.set('scope', params.scope);
+  qs.set('start_time', start);
+  qs.set('end_time', end);
+  const url = `/markets?${qs.toString()}`;
   try {
     const res = await signedFetch(url, 'GET', '');
     if (!res.ok) {
       if (res.status === 404) {
-        logger('Kalshi markets fetch returned 404 for league', league);
+        logger('Kalshi markets fetch returned 404 for sports query', params);
         return [];
       }
       const text = await safeReadText(res);
@@ -512,7 +570,7 @@ async function fetchOpenMarkets(league: string, logger: (...args: unknown[]) => 
     }
   } catch (error) {
     if ((error as Error).message === 'fetch-timeout') {
-      logger('Kalshi markets fetch timed out', league);
+      logger('Kalshi markets fetch timed out', params);
       throw new Error('markets-fetch-timeout');
     }
     throw error;
@@ -545,11 +603,18 @@ function normalizeSegments(ticker: string) {
 
 function hasTeamCodes(ticker: string, homeCode: string, awayCode: string) {
   const segments = normalizeSegments(ticker);
-  return segments.includes(homeCode.toUpperCase()) && segments.includes(awayCode.toUpperCase());
+  const home = homeCode.toUpperCase();
+  const away = awayCode.toUpperCase();
+  return segments.includes(home) && segments.includes(away);
 }
 
-function hasSide(segments: string[], sideCode: 'H' | 'A') {
-  return segments.includes(sideCode);
+function extractSide(segments: string[]): 'H' | 'A' | null {
+  const last = segments[segments.length - 1];
+  if (last === 'H' || last === 'A') return last;
+  const secondLast = segments[segments.length - 2];
+  if (secondLast === 'H' || secondLast === 'A') return secondLast;
+  const found = segments.find((s) => s === 'H' || s === 'A');
+  return found === 'H' || found === 'A' ? found : null;
 }
 
 function isMoneyline(segments: string[]) {
