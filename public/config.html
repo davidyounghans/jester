@@ -172,6 +172,7 @@
     <script>
       const STORAGE_KEY = 'jester-kalshi-server';
       const serverInput = document.querySelector('#serverUrl');
+      const tokenInput = document.querySelector('#tokenInput');
       const form = document.querySelector('#configForm');
       const statusEl = document.querySelector('#status');
 
@@ -192,8 +193,12 @@
       const clearBtn = document.querySelector('#clearLog');
 
       const savedServer = localStorage.getItem(STORAGE_KEY);
+      const savedToken = localStorage.getItem(`${STORAGE_KEY}-token`);
       if (savedServer) {
         serverInput.value = savedServer;
+        if (savedToken) {
+          tokenInput.value = savedToken;
+        }
         fetchConfig(savedServer);
       }
 
@@ -206,6 +211,7 @@
         }
 
         localStorage.setItem(STORAGE_KEY, base);
+        localStorage.setItem(`${STORAGE_KEY}-token`, tokenInput.value.trim());
         const payload = {
           enabled: enabledInput.checked,
           league: leagueInput.value,
@@ -219,7 +225,8 @@
           testMode: testModeInput.checked
         };
 
-        fetch(`${base.replace(/\/$/, '')}/config/kalshi`, {
+        const tokenParam = tokenInput.value.trim() ? `?token=${encodeURIComponent(tokenInput.value.trim())}` : '';
+        fetch(`${base.replace(/\/$/, '')}/config/kalshi${tokenParam}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
@@ -241,7 +248,8 @@
       });
 
       function fetchConfig(baseUrl) {
-        fetch(`${baseUrl.replace(/\/$/, '')}/config/kalshi`)
+        const tokenParam = tokenInput.value.trim() ? `?token=${encodeURIComponent(tokenInput.value.trim())}` : '';
+        fetch(`${baseUrl.replace(/\/$/, '')}/config/kalshi${tokenParam}`)
           .then((res) => {
             if (!res.ok) {
               throw new Error('Unable to load settings');

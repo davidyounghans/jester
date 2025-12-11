@@ -115,6 +115,8 @@
       <form id="serverForm">
         <label for="serverInput">Realtime server URL (wss://...)</label>
         <input type="url" id="serverInput" name="server" placeholder="wss://example.com" required />
+        <label for="tokenInput">Access token (optional)</label>
+        <input type="password" id="tokenInput" name="token" placeholder="shared secret" />
         <button type="submit">Connect</button>
       </form>
     </main>
@@ -126,12 +128,17 @@
       const statusEl = document.querySelector('#connectionStatus');
       const serverForm = document.querySelector('#serverForm');
       const serverInput = document.querySelector('#serverInput');
+      const tokenInput = document.querySelector('#tokenInput');
 
       let link = null;
       let resetTimer = null;
       const savedUrl = localStorage.getItem(STORAGE_KEY);
+      const savedToken = localStorage.getItem(`${STORAGE_KEY}-token`);
       if (savedUrl) {
         serverInput.value = savedUrl;
+        if (savedToken) {
+          tokenInput.value = savedToken;
+        }
         connect(savedUrl);
       }
 
@@ -148,10 +155,12 @@
         }
 
         localStorage.setItem(STORAGE_KEY, normalized);
+        localStorage.setItem(`${STORAGE_KEY}-token`, tokenInput.value.trim());
         link?.dispose();
         link = new RealtimeLink({
           role: 'display',
           serverUrl: normalized,
+          token: tokenInput.value.trim(),
           onStatus: updateStatus,
           onFlash: handleFlash
         });
