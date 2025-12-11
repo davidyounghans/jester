@@ -104,7 +104,7 @@
       <form id="configForm">
         <label>
           Relay server URL (https://jester.fly.dev)
-          <input type="url" id="serverUrl" required placeholder="https://jester.fly.dev" />
+          <input type="url" id="serverUrl" required placeholder="https://jester.fly.dev" value="https://jester.fly.dev" />
         </label>
         <label>
           Access token (optional; must match server ACCESS_TOKEN)
@@ -117,13 +117,13 @@
         <div class="grid">
           <label>
             League (e.g. NBA, NFL)
-            <input type="text" id="league" placeholder="NBA" required />
+            <input type="text" id="league" placeholder="NBA" value="NBA" required />
           </label>
         </div>
         <div class="grid">
           <label>
             Home team label
-            <input type="text" id="homeTeam" placeholder="Denver Nuggets" />
+            <input type="text" id="homeTeam" placeholder="Denver Nuggets" value="Denver Nuggets" />
           </label>
           <label>
             Away team label
@@ -133,7 +133,7 @@
         <div class="grid">
           <label>
             Home team code (matches Kalshi)
-            <input type="text" id="homeCode" placeholder="DEN" />
+            <input type="text" id="homeCode" placeholder="DEN" value="DEN" />
           </label>
           <label>
             Away team code

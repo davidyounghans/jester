@@ -250,6 +250,14 @@ async function placeSpread(cfg: KalshiConfig, side: TriggerSide, logger: (...arg
   const eventTicker = buildEventTicker(cfg);
   if (!eventTicker) {
     logger('Kalshi skipped: missing event ticker for spread');
+    if (cfg.testMode) {
+      recordTestEvent({
+        ticker: 'unknown',
+        side,
+        count: cfg.betUnitSize,
+        body: { note: 'spread skipped: missing event ticker' }
+      });
+    }
     return { ok: true, skippedReason: 'missing-event-ticker' };
   }
 
@@ -286,6 +294,14 @@ async function placeSpread(cfg: KalshiConfig, side: TriggerSide, logger: (...arg
 
     if (scored.length === 0) {
       logger('Kalshi spread skipped: no spreads found');
+      if (cfg.testMode) {
+        recordTestEvent({
+          ticker: eventTicker,
+          side,
+          count: cfg.betUnitSize,
+          body: { note: 'spread skipped: no spreads found' }
+        });
+      }
       return { ok: true, skippedReason: 'no-spreads' };
     }
 
@@ -322,6 +338,14 @@ async function placeSpread(cfg: KalshiConfig, side: TriggerSide, logger: (...arg
     if (!response.ok) {
       const text = await safeReadText(response);
       logger('Kalshi spread rejected', response.status, text);
+      if (cfg.testMode) {
+        recordTestEvent({
+          ticker: chosenTicker,
+          side,
+          count: cfg.betUnitSize,
+          body: { error: `rejected ${response.status}`, response: text, observed_price: chosenPrice }
+        });
+      }
       return { ok: false, error: `Kalshi request failed (${response.status})` };
     }
 
