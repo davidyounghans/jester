@@ -367,7 +367,8 @@
                 const err = evt.error ? ` error=${evt.error}` : '';
                 const body = evt.responseBody ? `\n${evt.responseBody}` : '';
                 const count = evt.count ? ` count=${evt.count}` : '';
-                return `${when} ${evt.kind?.toUpperCase?.() ?? ''} ${evt.side?.toUpperCase?.() ?? ''} @ ${evt.ticker ?? 'unknown'}${count}${status}${note}${err}${body}`;
+                const details = evt.details ? `\ndetails: ${JSON.stringify(evt.details, null, 2)}` : '';
+                return `${when} ${evt.kind?.toUpperCase?.() ?? ''} ${evt.side?.toUpperCase?.() ?? ''} @ ${evt.ticker ?? 'unknown'}${count}${status}${note}${err}${body}${details}`;
               })
               .join('\n\n');
           })
