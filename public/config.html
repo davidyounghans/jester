@@ -210,8 +210,10 @@
           return;
         }
 
+        const token = tokenInput.value.trim();
+
         localStorage.setItem(STORAGE_KEY, base);
-        localStorage.setItem(`${STORAGE_KEY}-token`, tokenInput.value.trim());
+        localStorage.setItem(`${STORAGE_KEY}-token`, token);
         const payload = {
           enabled: enabledInput.checked,
           league: leagueInput.value,
@@ -225,7 +227,7 @@
           testMode: testModeInput.checked
         };
 
-        const tokenParam = tokenInput.value.trim() ? `?token=${encodeURIComponent(tokenInput.value.trim())}` : '';
+        const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
         fetch(`${base.replace(/\/$/, '')}/config/kalshi${tokenParam}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -248,7 +250,8 @@
       });
 
       function fetchConfig(baseUrl) {
-        const tokenParam = tokenInput.value.trim() ? `?token=${encodeURIComponent(tokenInput.value.trim())}` : '';
+        const token = tokenInput.value.trim();
+        const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
         fetch(`${baseUrl.replace(/\/$/, '')}/config/kalshi${tokenParam}`)
           .then((res) => {
             if (!res.ok) {
@@ -299,7 +302,8 @@
           logOutput.textContent = 'Enter the relay URL to view logs.';
           return;
         }
-        const tokenParam = tokenInput.value.trim() ? `?token=${encodeURIComponent(tokenInput.value.trim())}` : '';
+        const token = tokenInput.value.trim();
+        const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
         fetch(`${base.replace(/\/$/, '')}/config/kalshi/test${tokenParam}`)
           .then((res) => res.json())
           .then((data) => {
@@ -327,7 +331,8 @@
         if (!base) {
           return;
         }
-        const tokenParam = tokenInput.value.trim() ? `?token=${encodeURIComponent(tokenInput.value.trim())}` : '';
+        const token = tokenInput.value.trim();
+        const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
         fetch(`${base.replace(/\/$/, '')}/config/kalshi/test${tokenParam}`, { method: 'DELETE' }).then(() => {
           logOutput.textContent = 'Log cleared.';
         });
