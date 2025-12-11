@@ -3,7 +3,15 @@ import crypto from 'node:crypto';
 import { RawData, WebSocket, WebSocketServer } from 'ws';
 import dotenv from 'dotenv';
 import { z } from 'zod';
-import { clearTestEvents, getKalshiConfig, getTestEvents, handleKalshiTrigger, updateKalshiConfig } from './kalshi.js';
+import {
+  clearLiveEvents,
+  clearTestEvents,
+  getKalshiConfig,
+  getLiveEvents,
+  getTestEvents,
+  handleKalshiTrigger,
+  updateKalshiConfig
+} from './kalshi.js';
 
 dotenv.config();
 
@@ -93,6 +101,19 @@ const httpServer = http.createServer(async (req: IncomingMessage, res: ServerRes
 
     if (req.method === 'DELETE' && url.pathname === '/config/kalshi/test') {
       clearTestEvents();
+      res.writeHead(204, defaultJsonHeaders());
+      res.end();
+      return;
+    }
+
+    if (req.method === 'GET' && url.pathname === '/config/kalshi/live') {
+      res.writeHead(200, defaultJsonHeaders());
+      res.end(JSON.stringify({ events: getLiveEvents() }));
+      return;
+    }
+
+    if (req.method === 'DELETE' && url.pathname === '/config/kalshi/live') {
+      clearLiveEvents();
       res.writeHead(204, defaultJsonHeaders());
       res.end();
       return;

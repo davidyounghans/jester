@@ -93,6 +93,16 @@
         font-size: 0.85rem;
         min-height: 1.4rem;
       }
+
+      pre {
+        background: rgba(2, 6, 23, 0.8);
+        border: 1px solid rgba(148, 163, 184, 0.25);
+        border-radius: 0.9rem;
+        padding: 0.75rem;
+        white-space: pre-wrap;
+        max-height: 320px;
+        overflow: auto;
+      }
     </style>
   </head>
   <body>
@@ -154,7 +164,7 @@
         </label>
         <label class="toggle">
           <input type="checkbox" id="spreadEnabled" />
-          Enable spread bets (choose spread priced near 40-60¢)
+          Enable spread bets (choose spread priced near 40-60)
         </label>
         <button type="submit">Save settings</button>
         <div class="status" id="status"></div>
@@ -167,6 +177,15 @@
           <button type="button" id="clearLog">Clear log</button>
         </div>
         <pre id="logOutput">No events yet.</pre>
+      </section>
+      <section id="liveSection">
+        <h2>Live orders</h2>
+        <p>Recent real orders (non-test), including rejection bodies.</p>
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap">
+          <button type="button" id="refreshLive">Refresh live log</button>
+          <button type="button" id="clearLive">Clear live log</button>
+        </div>
+        <pre id="liveOutput">No live events yet.</pre>
       </section>
     </main>
     <script>
@@ -192,6 +211,9 @@
       const logOutput = document.querySelector('#logOutput');
       const refreshBtn = document.querySelector('#refreshLog');
       const clearBtn = document.querySelector('#clearLog');
+      const liveOutput = document.querySelector('#liveOutput');
+      const liveRefreshBtn = document.querySelector('#refreshLive');
+      const liveClearBtn = document.querySelector('#clearLive');
 
       const savedToken = localStorage.getItem(`${STORAGE_KEY}-token`);
       serverInput.value = DEFAULT_SERVER;
@@ -234,7 +256,7 @@
           .then((data) => {
             populateForm(data);
             setStatus('Settings saved successfully');
-            maybeFetchLog();
+            maybeFetchLogs();
           })
           .catch((err) => {
             setStatus(err.message || 'Failed to save settings', true);
@@ -254,7 +276,7 @@
           .then((data) => {
             populateForm(data);
             setStatus('Settings loaded');
-            maybeFetchLog();
+            maybeFetchLogs();
           })
           .catch((err) => {
             setStatus(err.message || 'Failed to load settings', true);
@@ -280,15 +302,17 @@
         statusEl.style.color = isError ? '#f87171' : '#a5f3fc';
       }
 
-      function maybeFetchLog() {
+      function maybeFetchLogs() {
         testSection.hidden = !testModeInput.checked;
-        if (!testModeInput.checked) {
-          return;
-        }
-        refreshLog();
+        refreshTestLog();
+        refreshLiveLog();
       }
 
-      function refreshLog() {
+      function refreshTestLog() {
+        if (!testModeInput.checked) {
+          logOutput.textContent = 'Test mode is off.';
+          return;
+        }
         const base = DEFAULT_SERVER;
         const token = tokenInput.value.trim();
         const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
@@ -304,21 +328,18 @@
               .map((evt) => {
                 const when = new Date(evt.at).toLocaleTimeString();
                 const body = evt.body ? JSON.stringify(evt.body, null, 2) : '';
-                const header = `${when} — ${evt.side?.toUpperCase?.() ?? ''} ${evt.count} @ ${evt.ticker}`;
+                const header = `${when} ${evt.side?.toUpperCase?.() ?? ''} ${evt.count} @ ${evt.ticker}`;
                 return body ? `${header}\n${body}` : header;
               })
               .join('\n\n');
           })
           .catch(() => {
-            logOutput.textContent = 'Unable to load events.';
+            logOutput.textContent = 'Unable to load test events.';
           });
       }
 
-      function clearLog() {
-        const base = serverInput.value.trim();
-        if (!base) {
-          return;
-        }
+      function clearTestLog() {
+        const base = DEFAULT_SERVER;
         const token = tokenInput.value.trim();
         const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
         fetch(`${base.replace(/\/$/, '')}/config/kalshi/test${tokenParam}`, { method: 'DELETE' }).then(() => {
@@ -326,9 +347,50 @@
         });
       }
 
-      refreshBtn.addEventListener('click', refreshLog);
-      clearBtn.addEventListener('click', clearLog);
-      testModeInput.addEventListener('change', maybeFetchLog);
+      function refreshLiveLog() {
+        const base = DEFAULT_SERVER;
+        const token = tokenInput.value.trim();
+        const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
+        fetch(`${base.replace(/\/$/, '')}/config/kalshi/live${tokenParam}`)
+          .then((res) => res.json())
+          .then((data) => {
+            const events = data.events ?? [];
+            if (!events.length) {
+              liveOutput.textContent = 'No live events logged yet.';
+              return;
+            }
+            liveOutput.textContent = events
+              .map((evt) => {
+                const when = new Date(evt.at).toLocaleTimeString();
+                const status = evt.status ? ` status=${evt.status}` : '';
+                const note = evt.note ? ` note=${evt.note}` : '';
+                const err = evt.error ? ` error=${evt.error}` : '';
+                const body = evt.responseBody ? `\n${evt.responseBody}` : '';
+                const count = evt.count ? ` count=${evt.count}` : '';
+                return `${when} ${evt.kind?.toUpperCase?.() ?? ''} ${evt.side?.toUpperCase?.() ?? ''} @ ${evt.ticker ?? 'unknown'}${count}${status}${note}${err}${body}`;
+              })
+              .join('\n\n');
+          })
+          .catch(() => {
+            liveOutput.textContent = 'Unable to load live events.';
+          });
+      }
+
+      function clearLiveLog() {
+        const base = DEFAULT_SERVER;
+        const token = tokenInput.value.trim();
+        const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
+        fetch(`${base.replace(/\/$/, '')}/config/kalshi/live${tokenParam}`, { method: 'DELETE' }).then(() => {
+          liveOutput.textContent = 'Log cleared.';
+        });
+      }
+
+      refreshBtn.addEventListener('click', refreshTestLog);
+      clearBtn.addEventListener('click', clearTestLog);
+      liveRefreshBtn.addEventListener('click', refreshLiveLog);
+      liveClearBtn.addEventListener('click', clearLiveLog);
+      testModeInput.addEventListener('change', maybeFetchLogs);
+      refreshLiveLog();
     </script>
   </body>
 </html>

@@ -50,6 +50,17 @@ const defaultConfig: KalshiConfig = {
 
 let runtimeConfig: KalshiConfig = loadConfigFromDisk();
 const testEventLog: Array<{ at: number; side: TriggerSide; ticker: string; count: number; body: unknown }> = [];
+const liveEventLog: Array<{
+  at: number;
+  side: TriggerSide;
+  kind: 'moneyline' | 'spread';
+  ticker?: string | null;
+  count?: number;
+  status?: number;
+  responseBody?: string;
+  error?: string;
+  note?: string;
+}> = [];
 
 export function getKalshiConfig(): KalshiConfig {
   return runtimeConfig;
@@ -81,6 +92,14 @@ export function getTestEvents() {
 
 export function clearTestEvents() {
   testEventLog.length = 0;
+}
+
+export function getLiveEvents() {
+  return [...liveEventLog].reverse();
+}
+
+export function clearLiveEvents() {
+  liveEventLog.length = 0;
 }
 
 export async function handleKalshiTrigger(side: TriggerSide, logger: (...args: unknown[]) => void): Promise<KalshiResult> {
@@ -221,6 +240,22 @@ function recordTestEvent(event: { ticker: string; side: TriggerSide; count: numb
   }
 }
 
+function recordLiveEvent(event: {
+  side: TriggerSide;
+  kind: 'moneyline' | 'spread';
+  ticker?: string | null;
+  count?: number;
+  status?: number;
+  responseBody?: string;
+  error?: string;
+  note?: string;
+}) {
+  liveEventLog.push({ ...event, at: Date.now() });
+  if (liveEventLog.length > 100) {
+    liveEventLog.splice(0, liveEventLog.length - 100);
+  }
+}
+
 async function placeMoneyline(cfg: KalshiConfig, side: TriggerSide, logger: (...args: unknown[]) => void): Promise<KalshiResult> {
   const ticker = buildMoneylineTicker(cfg, side);
   if (!ticker) {
@@ -252,13 +287,23 @@ async function placeMoneyline(cfg: KalshiConfig, side: TriggerSide, logger: (...
     if (!response.ok) {
       const text = await safeReadText(response);
       logger('Kalshi moneyline rejected', response.status, text);
+      recordLiveEvent({
+        side,
+        kind: 'moneyline',
+        ticker,
+        count: cfg.betUnitSize,
+        status: response.status,
+        responseBody: text || undefined
+      });
       return { ok: false, error: `Kalshi request failed (${response.status})` };
     }
 
     logger('Kalshi moneyline placed', ticker, cfg.betUnitSize);
+    recordLiveEvent({ side, kind: 'moneyline', ticker, count: cfg.betUnitSize, status: response.status });
     return { ok: true };
   } catch (error) {
     logger('Kalshi moneyline error', error);
+    recordLiveEvent({ side, kind: 'moneyline', ticker, count: cfg.betUnitSize, error: (error as Error).message });
     return { ok: false, error: (error as Error).message };
   }
 }
@@ -371,14 +416,24 @@ async function placeSpread(cfg: KalshiConfig, side: TriggerSide, logger: (...arg
           body: { error: `rejected ${response.status}`, response: text, observed_price: chosenPrice }
         });
       }
+      recordLiveEvent({
+        side,
+        kind: 'spread',
+        ticker: chosenTicker,
+        count: cfg.betUnitSize,
+        status: response.status,
+        responseBody: text || undefined
+      });
       return { ok: false, error: `Kalshi request failed (${response.status})` };
     }
 
     logger('Kalshi spread placed', chosenTicker, cfg.betUnitSize, 'at~', chosenPrice);
+    recordLiveEvent({ side, kind: 'spread', ticker: chosenTicker, count: cfg.betUnitSize, status: response.status, note: `price~${chosenPrice}` });
     return { ok: true };
   } catch (error) {
     const message = (error as Error).message ?? 'spread-error';
     logger('Kalshi spread error', message);
+    recordLiveEvent({ side, kind: 'spread', ticker: chosenTicker ?? eventTicker, count: cfg.betUnitSize, error: message });
     if (cfg.testMode) {
       recordTestEvent({
         ticker: chosenTicker ?? eventTicker ?? 'unknown',
