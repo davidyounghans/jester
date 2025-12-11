@@ -88,7 +88,7 @@
       }
 
       .connection-block {
-        margin-top: 2rem;
+        margin-top: 3rem;
         padding-top: 1rem;
         border-top: 1px solid rgba(248, 250, 252, 0.12);
         display: flex;
@@ -152,7 +152,7 @@
 
       <div class="connection-block">
         <form id="serverForm">
-          <input type="url" id="serverInput" name="server" placeholder="Relay server URL (wss://...)" required />
+          <input type="url" id="serverInput" name="server" placeholder="Relay server URL (wss://...)" required readonly />
           <input type="password" id="tokenInput" name="token" placeholder="Access token (optional)" />
           <button type="submit" class="connect">Connect</button>
         </form>
@@ -169,6 +169,7 @@
     <script type="module">
       import { RealtimeLink, normalizeServerUrl } from './js/realtime.js';
 
+      const DEFAULT_SERVER = 'https://jester.fly.dev';
       const STORAGE_KEY = 'jester-server-url';
       const serverInput = document.querySelector('#serverInput');
       const tokenInput = document.querySelector('#tokenInput');
@@ -183,20 +184,16 @@
       let link = null;
       let lastSendAt = null;
 
-      const savedUrl = localStorage.getItem(STORAGE_KEY);
       const savedToken = localStorage.getItem(`${STORAGE_KEY}-token`);
-      if (savedUrl) {
-        serverInput.value = savedUrl;
-        if (savedToken) {
-          tokenInput.value = savedToken;
-        }
-        connect(savedUrl);
+      serverInput.value = DEFAULT_SERVER;
+      if (savedToken) {
+        tokenInput.value = savedToken;
       }
+      connect(DEFAULT_SERVER);
 
       serverForm.addEventListener('submit', (event) => {
         event.preventDefault();
-        const raw = serverInput.value.trim();
-        connect(raw);
+        connect(DEFAULT_SERVER);
       });
 
       function connect(rawUrl) {
@@ -206,7 +203,6 @@
           return;
         }
 
-        localStorage.setItem(STORAGE_KEY, normalized);
         localStorage.setItem(`${STORAGE_KEY}-token`, tokenInput.value.trim());
         link?.dispose();
         link = new RealtimeLink({

@@ -103,8 +103,8 @@
       </section>
       <form id="configForm">
         <label>
-          Relay server URL (https://jester.fly.dev)
-          <input type="url" id="serverUrl" required placeholder="https://jester.fly.dev" value="https://jester.fly.dev" />
+          Relay server URL (fixed)
+          <input type="url" id="serverUrl" required placeholder="https://jester.fly.dev" value="https://jester.fly.dev" readonly />
         </label>
         <label>
           Access token (optional; must match server ACCESS_TOKEN)
@@ -170,6 +170,7 @@
       </section>
     </main>
     <script>
+      const DEFAULT_SERVER = 'https://jester.fly.dev';
       const STORAGE_KEY = 'jester-kalshi-server';
       const serverInput = document.querySelector('#serverUrl');
       const tokenInput = document.querySelector('#tokenInput');
@@ -192,27 +193,18 @@
       const refreshBtn = document.querySelector('#refreshLog');
       const clearBtn = document.querySelector('#clearLog');
 
-      const savedServer = localStorage.getItem(STORAGE_KEY);
       const savedToken = localStorage.getItem(`${STORAGE_KEY}-token`);
-      if (savedServer) {
-        serverInput.value = savedServer;
-        if (savedToken) {
-          tokenInput.value = savedToken;
-        }
-        fetchConfig(savedServer);
+      serverInput.value = DEFAULT_SERVER;
+      if (savedToken) {
+        tokenInput.value = savedToken;
       }
+      fetchConfig(DEFAULT_SERVER);
 
       form.addEventListener('submit', (event) => {
         event.preventDefault();
-        const base = serverInput.value.trim();
-        if (!base) {
-          setStatus('Please enter the relay URL', true);
-          return;
-        }
-
+        const base = DEFAULT_SERVER;
         const token = tokenInput.value.trim();
 
-        localStorage.setItem(STORAGE_KEY, base);
         localStorage.setItem(`${STORAGE_KEY}-token`, token);
         const payload = {
           enabled: enabledInput.checked,
@@ -297,11 +289,7 @@
       }
 
       function refreshLog() {
-        const base = serverInput.value.trim();
-        if (!base) {
-          logOutput.textContent = 'Enter the relay URL to view logs.';
-          return;
-        }
+        const base = DEFAULT_SERVER;
         const token = tokenInput.value.trim();
         const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
         fetch(`${base.replace(/\/$/, '')}/config/kalshi/test${tokenParam}`)

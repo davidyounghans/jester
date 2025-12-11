@@ -113,8 +113,8 @@
         <span id="connectionStatus">idle</span>
       </p>
       <form id="serverForm">
-        <label for="serverInput">Realtime server URL (wss://...)</label>
-        <input type="url" id="serverInput" name="server" placeholder="wss://example.com" required />
+        <label for="serverInput">Realtime server URL (fixed)</label>
+        <input type="url" id="serverInput" name="server" placeholder="https://jester.fly.dev" required readonly />
         <label for="tokenInput">Access token (optional)</label>
         <input type="password" id="tokenInput" name="token" placeholder="shared secret" />
         <button type="submit">Connect</button>
@@ -123,6 +123,7 @@
     <script type="module">
       import { RealtimeLink, normalizeServerUrl } from './js/realtime.js';
 
+      const DEFAULT_SERVER = 'https://jester.fly.dev';
       const STORAGE_KEY = 'jester-server-url';
       const messageEl = document.querySelector('#message');
       const statusEl = document.querySelector('#connectionStatus');
@@ -132,19 +133,16 @@
 
       let link = null;
       let resetTimer = null;
-      const savedUrl = localStorage.getItem(STORAGE_KEY);
       const savedToken = localStorage.getItem(`${STORAGE_KEY}-token`);
-      if (savedUrl) {
-        serverInput.value = savedUrl;
-        if (savedToken) {
-          tokenInput.value = savedToken;
-        }
-        connect(savedUrl);
+      serverInput.value = DEFAULT_SERVER;
+      if (savedToken) {
+        tokenInput.value = savedToken;
       }
+      connect(DEFAULT_SERVER);
 
       serverForm.addEventListener('submit', (event) => {
         event.preventDefault();
-        connect(serverInput.value.trim());
+        connect(DEFAULT_SERVER);
       });
 
       function connect(rawUrl) {
@@ -154,7 +152,6 @@
           return;
         }
 
-        localStorage.setItem(STORAGE_KEY, normalized);
         localStorage.setItem(`${STORAGE_KEY}-token`, tokenInput.value.trim());
         link?.dispose();
         link = new RealtimeLink({
