@@ -31,6 +31,7 @@ const CONFIG_PATH = process.env.KALSHI_CONFIG_PATH
 
 // Default to the current Kalshi API base (v2); override via KALSHI_API_BASE if needed.
 const API_BASE = process.env.KALSHI_API_BASE ?? 'https://api.elections.kalshi.com/trade-api/v2';
+const FETCH_TIMEOUT_MS = 8000;
 const ACCESS_KEY = process.env.KALSHI_ACCESS_KEY ?? process.env.KALSHI_API_KEY;
 const PRIVATE_KEY = process.env.KALSHI_PRIVATE_KEY ?? '';
 
@@ -109,7 +110,7 @@ export async function handleKalshiTrigger(side: TriggerSide, logger: (...args: u
   return results.every((r) => r.ok) ? { ok: true } : { ok: false, error: 'one-or-more-orders-failed' };
 }
 
-async function signedFetch(pathname: string, method: string, body: unknown): Promise<Response> {
+async function signedFetch(pathname: string, method: string, body: unknown, timeoutMs: number = FETCH_TIMEOUT_MS): Promise<Response> {
   const url = new URL(pathname, API_BASE);
   const isBodyAllowed = method.toUpperCase() !== 'GET' && method.toUpperCase() !== 'HEAD';
   const serializedBody = isBodyAllowed && body ? JSON.stringify(body) : '';
@@ -140,7 +141,18 @@ async function signedFetch(pathname: string, method: string, body: unknown): Pro
     fetchOptions.body = serializedBody;
   }
 
-  return fetch(url, fetchOptions);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...fetchOptions, signal: controller.signal });
+  } catch (error) {
+    if ((error as Error).name === 'AbortError') {
+      throw new Error('fetch-timeout');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function loadConfigFromDisk(): KalshiConfig {
@@ -365,16 +377,17 @@ async function placeSpread(cfg: KalshiConfig, side: TriggerSide, logger: (...arg
     logger('Kalshi spread placed', chosenTicker, cfg.betUnitSize, 'at~', chosenPrice);
     return { ok: true };
   } catch (error) {
-    logger('Kalshi spread error', error);
+    const message = (error as Error).message ?? 'spread-error';
+    logger('Kalshi spread error', message);
     if (cfg.testMode) {
       recordTestEvent({
         ticker: chosenTicker ?? eventTicker ?? 'unknown',
         side,
         count: cfg.betUnitSize,
-        body: { note: 'spread error', error: (error as Error).message }
+        body: { note: 'spread error', error: message }
       });
     }
-    return { ok: false, error: (error as Error).message };
+    return { ok: false, error: message };
   }
 }
 
@@ -393,14 +406,31 @@ function buildEventTicker(config: KalshiConfig) {
 
 async function fetchMarketsByEvent(eventTicker: string, logger: (...args: unknown[]) => void) {
   const url = `/markets?event_ticker=${encodeURIComponent(eventTicker)}&status=open`;
-  const res = await signedFetch(url, 'GET', '');
-  if (!res.ok) {
-    const text = await safeReadText(res);
-    logger('Kalshi markets fetch failed', res.status, text);
-    throw new Error(`markets-fetch-failed:${res.status}`);
+  try {
+    const res = await signedFetch(url, 'GET', '');
+    if (!res.ok) {
+      if (res.status === 404) {
+        logger('Kalshi markets fetch returned 404 for event', eventTicker);
+        return [];
+      }
+      const text = await safeReadText(res);
+      logger('Kalshi markets fetch failed', res.status, text);
+      throw new Error(`markets-fetch-failed:${res.status}`);
+    }
+    try {
+      const json = (await res.json()) as { markets?: Array<{ ticker: string; yes_bid?: number; yes_ask?: number; last_price?: number }> };
+      return json.markets ?? [];
+    } catch (parseError) {
+      logger('Kalshi markets parse failed', (parseError as Error).message);
+      throw new Error('markets-parse-failed');
+    }
+  } catch (error) {
+    if ((error as Error).message === 'fetch-timeout') {
+      logger('Kalshi markets fetch timed out', eventTicker);
+      throw new Error('markets-fetch-timeout');
+    }
+    throw error;
   }
-  const json = (await res.json()) as { markets?: Array<{ ticker: string; yes_bid?: number; yes_ask?: number; last_price?: number }> };
-  return json.markets ?? [];
 }
 
 function pickPrice(market: { yes_bid?: number; yes_ask?: number; last_price?: number }): number | null {

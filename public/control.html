@@ -19,31 +19,91 @@
         color: #f8fafc;
       }
 
-      header {
-        padding: 1.5rem 1.25rem 0;
-        text-align: center;
-      }
-
-      h1 {
-        margin: 0;
-        font-size: 1.45rem;
-      }
-
       main {
         flex: 1;
         display: flex;
         flex-direction: column;
-        padding: 1rem 1.25rem 2rem;
-        gap: 1.5rem;
+        padding: 1.25rem;
+        gap: 1.25rem;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 1rem;
+      }
+
+      .tile {
+        position: relative;
+        width: 100%;
+        aspect-ratio: 3 / 2;
+        border: none;
+        border-radius: 1.25rem;
+        overflow: hidden;
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+        padding: 0;
+      }
+
+      .tile:disabled {
+        opacity: 0.45;
+      }
+
+      .tile .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
+
+      .tile.ski1 {
+        background-image: url('./images/1Ski.png');
+      }
+      .tile.ski2 {
+        background-image: url('./images/2Ski.png');
+      }
+      .tile.henry {
+        background-image: url('./images/3Henry.png');
+      }
+      .tile.greta {
+        background-image: url('./images/4Greta.png');
+      }
+      .tile.rooster {
+        background-image: url('./images/5Rooster.png');
+      }
+      .tile.dar {
+        background-image: url('./images/6Dar.png');
+      }
+      .tile.red {
+        background-image: url('./images/7Red.png');
+      }
+      .tile.mrc {
+        background-image: url('./images/8MrC.png');
+      }
+
+      .connection-block {
+        margin-top: 2rem;
+        padding-top: 1rem;
+        border-top: 1px solid rgba(248, 250, 252, 0.12);
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
       }
 
       form {
         display: flex;
         flex-direction: column;
-        gap: 0.5rem;
+        gap: 0.6rem;
       }
 
-      input[type="url"] {
+      input[type="url"],
+      input[type="password"] {
         border-radius: 0.75rem;
         border: 1px solid rgba(248, 250, 252, 0.2);
         background: rgba(15, 23, 42, 0.7);
@@ -71,72 +131,40 @@
         font-weight: 600;
       }
 
-      .buttons {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-        gap: 1rem;
-        margin-top: auto;
-      }
-
-      .buttons button {
-        font-size: 1.5rem;
-        min-height: 7rem;
-        border-radius: 1.5rem;
-        border: none;
-        color: #05060a;
-        font-weight: 700;
-        letter-spacing: 0.05em;
-        text-transform: uppercase;
-      }
-
-      .buttons button.home {
-        background: linear-gradient(120deg, #fbbf24, #f97316);
-      }
-
-      .buttons button.away {
-        background: linear-gradient(120deg, #34d399, #10b981);
-      }
-
-      .buttons button.cancel {
-        background: linear-gradient(120deg, #f87171, #ef4444);
-      }
-
-      .buttons button:disabled {
-        opacity: 0.3;
-      }
-
       .last-send {
         font-size: 0.85rem;
         opacity: 0.65;
-        text-align: center;
       }
     </style>
   </head>
   <body>
-    <header>
-      <h1>Jester Control</h1>
-    </header>
     <main>
-      <form id="serverForm">
-        <label for="serverInput">Realtime server URL (wss://...)</label>
-        <input type="url" id="serverInput" name="server" placeholder="wss://example.com" required />
-        <label for="tokenInput">Access token (optional)</label>
-        <input type="password" id="tokenInput" name="token" placeholder="shared secret" />
-        <button type="submit" class="connect">Connect</button>
-      </form>
-      <div class="status">
-        Connection:
-        <span id="connectionStatus">idle</span>
-        &middot;
-        Displays connected:
-        <span id="displayCount">0</span>
-      </div>
-      <div class="last-send" id="lastSend">No events sent yet</div>
-      <section class="buttons">
-        <button type="button" class="home" id="homeBtn" disabled>Home</button>
-        <button type="button" class="away" id="awayBtn" disabled>Away</button>
-        <button type="button" class="cancel" id="cancelBtn" disabled>Cancel</button>
+      <section class="grid">
+        <button type="button" class="tile ski1" aria-label="Ski 1" disabled><span class="sr-only">Ski 1</span></button>
+        <button type="button" class="tile ski2" aria-label="Ski 2" disabled><span class="sr-only">Ski 2</span></button>
+        <button type="button" class="tile henry" aria-label="Henry" disabled><span class="sr-only">Henry</span></button>
+        <button type="button" class="tile greta" aria-label="Greta" disabled><span class="sr-only">Greta</span></button>
+        <button type="button" class="tile rooster" id="homeBtn" aria-label="Home"><span class="sr-only">Home</span></button>
+        <button type="button" class="tile dar" id="awayBtn" aria-label="Away"><span class="sr-only">Away</span></button>
+        <button type="button" class="tile red" id="cancelBtn" aria-label="Cancel"><span class="sr-only">Cancel</span></button>
+        <button type="button" class="tile mrc" aria-label="Mr C" disabled><span class="sr-only">Mr C</span></button>
       </section>
+
+      <div class="connection-block">
+        <form id="serverForm">
+          <input type="url" id="serverInput" name="server" placeholder="Relay server URL (wss://...)" required />
+          <input type="password" id="tokenInput" name="token" placeholder="Access token (optional)" />
+          <button type="submit" class="connect">Connect</button>
+        </form>
+        <div class="status">
+          Connection:
+          <span id="connectionStatus">idle</span>
+          &middot;
+          Displays connected:
+          <span id="displayCount">0</span>
+        </div>
+        <div class="last-send" id="lastSend">No events sent yet</div>
+      </div>
     </main>
     <script type="module">
       import { RealtimeLink, normalizeServerUrl } from './js/realtime.js';
