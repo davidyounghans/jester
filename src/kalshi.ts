@@ -540,41 +540,58 @@ async function fetchOpenMarkets(
   const now = Date.now();
   const start = new Date(now - 24 * 60 * 60 * 1000).toISOString(); // yesterday
   const end = new Date(now + 7 * 24 * 60 * 60 * 1000).toISOString(); // next 7 days
-  const qs = new URLSearchParams();
-  qs.set('type', 'sports');
-  qs.set('status', 'open');
-  qs.set('limit', '500');
-  qs.set('sport', params.sport);
-  qs.set('competition', params.competition);
-  qs.set('scope', params.scope);
-  qs.set('start_time', start);
-  qs.set('end_time', end);
-  const url = `/markets?${qs.toString()}`;
-  try {
-    const res = await signedFetch(url, 'GET', '');
-    if (!res.ok) {
-      if (res.status === 404) {
-        logger('Kalshi markets fetch returned 404 for sports query', params);
-        return [];
-      }
-      const text = await safeReadText(res);
-      logger('Kalshi markets fetch failed', res.status, text);
-      throw new Error(`markets-fetch-failed:${res.status}`);
-    }
+  const all: Array<{ ticker: string; yes_bid?: number; yes_ask?: number; last_price?: number }> = [];
+  let cursor: string | undefined;
+  let page = 0;
+  const maxPages = 10;
+
+  while (page < maxPages) {
+    const qs = new URLSearchParams();
+    qs.set('type', 'sports');
+    qs.set('status', 'open');
+    qs.set('limit', '500');
+    qs.set('sport', params.sport);
+    qs.set('competition', params.competition);
+    qs.set('scope', params.scope);
+    qs.set('start_time', start);
+    qs.set('end_time', end);
+    if (cursor) qs.set('cursor', cursor);
+    const url = `/markets?${qs.toString()}`;
+    page += 1;
+
     try {
-      const json = (await res.json()) as { markets?: Array<{ ticker: string; yes_bid?: number; yes_ask?: number; last_price?: number }> };
-      return json.markets ?? [];
-    } catch (parseError) {
-      logger('Kalshi markets parse failed', (parseError as Error).message);
-      throw new Error('markets-parse-failed');
+      const res = await signedFetch(url, 'GET', '');
+      if (!res.ok) {
+        if (res.status === 404) {
+          logger('Kalshi markets fetch returned 404 for sports query', params);
+          return all;
+        }
+        const text = await safeReadText(res);
+        logger('Kalshi markets fetch failed', res.status, text);
+        throw new Error(`markets-fetch-failed:${res.status}`);
+      }
+      const json = (await res.json()) as {
+        markets?: Array<{ ticker: string; yes_bid?: number; yes_ask?: number; last_price?: number }>;
+        cursor?: string;
+      };
+      if (json.markets?.length) {
+        all.push(...json.markets);
+      }
+      if (json.cursor) {
+        cursor = json.cursor;
+        continue;
+      }
+      break;
+    } catch (error) {
+      if ((error as Error).message === 'fetch-timeout') {
+        logger('Kalshi markets fetch timed out', params);
+        throw new Error('markets-fetch-timeout');
+      }
+      throw error;
     }
-  } catch (error) {
-    if ((error as Error).message === 'fetch-timeout') {
-      logger('Kalshi markets fetch timed out', params);
-      throw new Error('markets-fetch-timeout');
-    }
-    throw error;
   }
+
+  return all;
 }
 
 function pickPrice(market: { yes_bid?: number; yes_ask?: number; last_price?: number }): number | null {
