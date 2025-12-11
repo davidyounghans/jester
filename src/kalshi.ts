@@ -285,7 +285,8 @@ async function placeMoneyline(cfg: KalshiConfig, side: TriggerSide, logger: (...
   try {
     const response = await signedFetch('/portfolio/orders', 'POST', orderBody);
     if (!response.ok) {
-      const text = await safeReadText(response);
+      const rawText = await safeReadText(response);
+      const text = rawText && rawText.trim() ? rawText : '(empty body)';
       logger('Kalshi moneyline rejected', response.status, text);
       recordLiveEvent({
         side,
@@ -406,7 +407,8 @@ async function placeSpread(cfg: KalshiConfig, side: TriggerSide, logger: (...arg
 
     const response = await signedFetch('/portfolio/orders', 'POST', orderBody);
     if (!response.ok) {
-      const text = await safeReadText(response);
+      const rawText = await safeReadText(response);
+      const text = rawText && rawText.trim() ? rawText : '(empty body)';
       logger('Kalshi spread rejected', response.status, text);
       if (cfg.testMode) {
         recordTestEvent({
