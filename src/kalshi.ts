@@ -111,7 +111,8 @@ export async function handleKalshiTrigger(side: TriggerSide, logger: (...args: u
 
 async function signedFetch(pathname: string, method: string, body: unknown): Promise<Response> {
   const url = new URL(pathname, API_BASE);
-  const serializedBody = body ? JSON.stringify(body) : '';
+  const isBodyAllowed = method.toUpperCase() !== 'GET' && method.toUpperCase() !== 'HEAD';
+  const serializedBody = isBodyAllowed && body ? JSON.stringify(body) : '';
   const timestamp = Date.now().toString();
   const signaturePayload = `${timestamp}${method.toUpperCase()}${url.pathname}${url.search ?? ''}${serializedBody}`;
 
@@ -131,11 +132,15 @@ async function signedFetch(pathname: string, method: string, body: unknown): Pro
     'KALSHI-ACCESS-TIMESTAMP': timestamp
   };
 
-  return fetch(url, {
+  const fetchOptions: RequestInit = {
     method,
-    headers,
-    body: serializedBody
-  });
+    headers
+  };
+  if (isBodyAllowed && serializedBody) {
+    fetchOptions.body = serializedBody;
+  }
+
+  return fetch(url, fetchOptions);
 }
 
 function loadConfigFromDisk(): KalshiConfig {
