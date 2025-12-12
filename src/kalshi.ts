@@ -31,8 +31,9 @@ const CONFIG_PATH = process.env.KALSHI_CONFIG_PATH
   ? path.resolve(process.env.KALSHI_CONFIG_PATH)
   : path.resolve(process.cwd(), 'kalshi.config.json');
 
-// Default to the current Kalshi API base (v2); override via KALSHI_API_BASE if needed.
-const API_BASE = process.env.KALSHI_API_BASE ?? 'https://api.elections.kalshi.com/trade-api/v2';
+// Base host (no path); the trade API prefix is added in signedFetch.
+const API_BASE = process.env.KALSHI_API_BASE ?? 'https://api.elections.kalshi.com';
+const API_PREFIX = '/trade-api/v2';
 const FETCH_TIMEOUT_MS = 8000;
 const ACCESS_KEY = process.env.KALSHI_ACCESS_KEY ?? process.env.KALSHI_API_KEY;
 const PRIVATE_KEY = process.env.KALSHI_PRIVATE_KEY ?? '';
@@ -137,7 +138,10 @@ export async function handleKalshiTrigger(side: TriggerSide, logger: (...args: u
 }
 
 async function signedFetch(pathname: string, method: string, body: unknown, timeoutMs: number = FETCH_TIMEOUT_MS): Promise<Response> {
-  const url = new URL(pathname, API_BASE);
+  // Ensure the request path includes the trade API prefix
+  const normalizedPath = pathname.startsWith('/') ? pathname : `/${pathname}`;
+  const fullPath = `${API_PREFIX}${normalizedPath}`;
+  const url = new URL(fullPath, API_BASE);
   const isBodyAllowed = method.toUpperCase() !== 'GET' && method.toUpperCase() !== 'HEAD';
   const serializedBody = isBodyAllowed && body ? JSON.stringify(body) : '';
   const timestamp = Date.now().toString();
