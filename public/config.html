@@ -124,30 +124,18 @@
           <input type="checkbox" id="enabled" />
           Enable trading module
         </label>
+        <label>
+          Event slug (full Kalshi event ticker, e.g., KXNBAGAME-25DEC12ATLDET)
+          <input type="text" id="slug" placeholder="KXNBAGAME-25DEC12ATLDET" />
+        </label>
         <div class="grid">
           <label>
-            League (e.g. NBA, NFL)
-            <input type="text" id="league" placeholder="NBA" value="NBA" required />
-          </label>
-        </div>
-        <div class="grid">
-          <label>
-            Home team label
-            <input type="text" id="homeTeam" placeholder="Denver Nuggets" value="Denver Nuggets" />
+            Team code to back with YES (Home button)
+            <input type="text" id="yesTeamCode" placeholder="DEN" />
           </label>
           <label>
-            Away team label
-            <input type="text" id="awayTeam" placeholder="LA Lakers" />
-          </label>
-        </div>
-        <div class="grid">
-          <label>
-            Home team code (matches Kalshi)
-            <input type="text" id="homeCode" placeholder="DEN" value="DEN" />
-          </label>
-          <label>
-            Away team code
-            <input type="text" id="awayCode" placeholder="LAL" />
+            Team code to back with YES on Away button
+            <input type="text" id="noTeamCode" placeholder="HOU" />
           </label>
         </div>
         <label>
@@ -197,11 +185,9 @@
       const statusEl = document.querySelector('#status');
 
       const enabledInput = document.querySelector('#enabled');
-      const leagueInput = document.querySelector('#league');
-      const homeTeamInput = document.querySelector('#homeTeam');
-      const awayTeamInput = document.querySelector('#awayTeam');
-      const homeCodeInput = document.querySelector('#homeCode');
-      const awayCodeInput = document.querySelector('#awayCode');
+      const slugInput = document.querySelector('#slug');
+      const yesTeamInput = document.querySelector('#yesTeamCode');
+      const noTeamInput = document.querySelector('#noTeamCode');
       const unitInput = document.querySelector('#betUnitSize');
       const testModeInput = document.querySelector('#testMode');
       const moneylineEnabledInput = document.querySelector('#moneylineEnabled');
@@ -230,11 +216,9 @@
         localStorage.setItem(`${STORAGE_KEY}-token`, token);
         const payload = {
           enabled: enabledInput.checked,
-          league: leagueInput.value,
-          homeTeam: homeTeamInput.value,
-          awayTeam: awayTeamInput.value,
-          homeCode: homeCodeInput.value,
-          awayCode: awayCodeInput.value,
+          slug: slugInput.value,
+          yesTeamCode: yesTeamInput.value,
+          noTeamCode: noTeamInput.value,
           betUnitSize: Number(unitInput.value) || 1,
           moneylineEnabled: moneylineEnabledInput.checked,
           spreadEnabled: spreadEnabledInput.checked,
@@ -285,11 +269,9 @@
 
       function populateForm(config) {
         enabledInput.checked = !!config.enabled;
-        leagueInput.value = config.league ?? '';
-        homeTeamInput.value = config.homeTeam ?? '';
-        awayTeamInput.value = config.awayTeam ?? '';
-        homeCodeInput.value = config.homeCode ?? '';
-        awayCodeInput.value = config.awayCode ?? '';
+        slugInput.value = config.slug ?? '';
+        yesTeamInput.value = config.yesTeamCode ?? '';
+        noTeamInput.value = config.noTeamCode ?? '';
         unitInput.value = config.betUnitSize ?? 1;
         testModeInput.checked = !!config.testMode;
         moneylineEnabledInput.checked = config.moneylineEnabled ?? true;
