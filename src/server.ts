@@ -31,7 +31,9 @@ const inboundSchema = z.discriminatedUnion('type', [
   }),
   z.object({
     type: z.literal('trigger'),
-    side: z.union([z.literal('home'), z.literal('away'), z.literal('cancel')])
+    side: z.union([z.literal('home'), z.literal('away'), z.literal('cancel')]),
+    team1: z.string().max(32).optional(),
+    team2: z.string().max(32).optional()
   }),
   z.object({
     type: z.literal('ping')
@@ -217,6 +219,8 @@ wss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
         const payload = {
           type: 'flash',
           side: parsed.side,
+          team1: parsed.team1,
+          team2: parsed.team2,
           at: Date.now(),
           by: client.id
         };

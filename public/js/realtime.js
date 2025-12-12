@@ -77,11 +77,11 @@ export class RealtimeLink {
   /**
    * Control clients invoke this to update the remote display.
    */
-  trigger(side) {
+  trigger(side, team1, team2) {
     if (this.role !== 'control') {
       throw new Error('Only control clients may trigger events');
     }
-    this.send({ type: 'trigger', side });
+    this.send({ type: 'trigger', side, team1, team2 });
   }
 
   handleMessage(raw) {

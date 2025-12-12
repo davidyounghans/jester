@@ -113,7 +113,8 @@
       }
 
       input[type="url"],
-      input[type="password"] {
+      input[type="password"],
+      input[type="text"] {
         border-radius: 0.75rem;
         border: 1px solid rgba(248, 250, 252, 0.2);
         background: rgba(15, 23, 42, 0.7);
@@ -166,6 +167,8 @@
           <input type="password" id="tokenInput" name="token" placeholder="Access token (optional)" />
           <button type="submit" class="connect">Connect</button>
         </form>
+        <input type="text" id="team1Input" name="team1" placeholder="Team 1 code (Home button)" />
+        <input type="text" id="team2Input" name="team2" placeholder="Team 2 code (Away button)" />
         <div class="status">
           Connection:
           <span id="connectionStatus">idle</span>
@@ -183,6 +186,8 @@
       const STORAGE_KEY = 'jester-server-url';
       const serverInput = document.querySelector('#serverInput');
       const tokenInput = document.querySelector('#tokenInput');
+      const team1Input = document.querySelector('#team1Input');
+      const team2Input = document.querySelector('#team2Input');
       const serverForm = document.querySelector('#serverForm');
       const statusEl = document.querySelector('#connectionStatus');
       const displayCountEl = document.querySelector('#displayCount');
@@ -194,11 +199,15 @@
       let link = null;
       let lastSendAt = null;
 
-      const savedToken = localStorage.getItem(`${STORAGE_KEY}-token`);
+     const savedToken = localStorage.getItem(`${STORAGE_KEY}-token`);
+      const savedTeam1 = localStorage.getItem(`${STORAGE_KEY}-team1`);
+      const savedTeam2 = localStorage.getItem(`${STORAGE_KEY}-team2`);
       serverInput.value = DEFAULT_SERVER;
       if (savedToken) {
         tokenInput.value = savedToken;
       }
+      if (savedTeam1) team1Input.value = savedTeam1;
+      if (savedTeam2) team2Input.value = savedTeam2;
       connect(DEFAULT_SERVER);
 
       serverForm.addEventListener('submit', (event) => {
@@ -213,7 +222,9 @@
           return;
         }
 
-        localStorage.setItem(`${STORAGE_KEY}-token`, tokenInput.value.trim());
+       localStorage.setItem(`${STORAGE_KEY}-token`, tokenInput.value.trim());
+        localStorage.setItem(`${STORAGE_KEY}-team1`, team1Input.value.trim());
+        localStorage.setItem(`${STORAGE_KEY}-team2`, team2Input.value.trim());
         link?.dispose();
         link = new RealtimeLink({
           role: 'control',
@@ -246,11 +257,11 @@
 
       homeBtn.addEventListener('click', () => {
         vibrateOnce();
-        link?.trigger('home');
+        link?.trigger('home', team1Input.value.trim(), team2Input.value.trim());
       });
       awayBtn.addEventListener('click', () => {
         vibrateTwice();
-        link?.trigger('away');
+        link?.trigger('away', team1Input.value.trim(), team2Input.value.trim());
       });
       cancelBtn.addEventListener('click', () => {
         vibrateLong();

@@ -170,7 +170,9 @@
       function handleFlash(payload) {
         let label = 'AWAY';
         if (payload.side === 'home') {
-          label = 'DEN';
+          label = payload.team1?.toUpperCase?.() || 'HOME';
+        } else if (payload.side === 'away') {
+          label = payload.team2?.toUpperCase?.() || 'AWAY';
         } else if (payload.side === 'cancel') {
           label = 'CANCEL';
         }
