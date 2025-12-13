@@ -57,8 +57,8 @@ const kalshiConfigPayload = z.object({
   moneylineEnabled: z.coerce.boolean().optional(),
   spreadEnabled: z.coerce.boolean().optional(),
   slug: z.string().max(120).optional(),
-  homeTicker: z.string().max(200).optional(),
-  awayTicker: z.string().max(200).optional(),
+  homeSuffix: z.string().max(200).optional(),
+  awaySuffix: z.string().max(200).optional(),
   betUnitSize: z.coerce.number().int().min(1).optional(),
   testMode: z.coerce.boolean().optional()
 });
