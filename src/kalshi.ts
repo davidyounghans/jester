@@ -9,6 +9,7 @@ export interface KalshiConfig {
   moneylineEnabled: boolean;
   spreadEnabled: boolean;
   slug: string; // Event ticker slug, e.g., KXNBAGAME-25DEC12ATLDET
+  spreadSlug: string; // Spread event slug, e.g., KXNBASPREAD-...
   homeSuffix: string; // suffix appended to slug for Home (e.g., ORL)
   awaySuffix: string; // suffix appended to slug for Away (e.g., NYK)
   betUnitSize: number;
@@ -50,6 +51,7 @@ const defaultConfig: KalshiConfig = {
   moneylineEnabled: true,
   spreadEnabled: false,
   slug: '',
+  spreadSlug: '',
   homeSuffix: '',
   awaySuffix: '',
   betUnitSize: 1,
@@ -83,6 +85,7 @@ export function updateKalshiConfig(partial: Partial<KalshiConfig>): KalshiConfig
     spreadEnabled: partial.spreadEnabled ?? runtimeConfig.spreadEnabled,
     betUnitSize: normalizeUnitSize(partial.betUnitSize ?? runtimeConfig.betUnitSize),
     slug: sanitizeSlug(partial.slug ?? runtimeConfig.slug),
+    spreadSlug: sanitizeSlug(partial.spreadSlug ?? runtimeConfig.spreadSlug),
     homeSuffix: sanitizeSlug(partial.homeSuffix ?? runtimeConfig.homeSuffix),
     awaySuffix: sanitizeSlug(partial.awaySuffix ?? runtimeConfig.awaySuffix),
     testMode: partial.testMode ?? runtimeConfig.testMode
@@ -459,8 +462,9 @@ async function placeMoneyline(cfg: KalshiConfig, side: TriggerSide, logger: (...
 
 async function placeSpread(cfg: KalshiConfig, side: TriggerSide, logger: (...args: unknown[]) => void): Promise<KalshiResult> {
   const suffix = side === 'home' ? cfg.homeSuffix : cfg.awaySuffix;
-  if (!cfg.slug || !suffix) {
-    logger('Kalshi spread skipped: missing slug or suffix for side', side);
+  const spreadSlug = cfg.spreadSlug || cfg.slug;
+  if (!spreadSlug || !suffix) {
+    logger('Kalshi spread skipped: missing spread slug or suffix for side', side);
     return { ok: true, skippedReason: 'missing-ticker' };
   }
 
@@ -474,16 +478,16 @@ async function placeSpread(cfg: KalshiConfig, side: TriggerSide, logger: (...arg
   }
 
   try {
-    const { markets, note } = await fetchMarketsBySlug(cfg.slug, logger);
+    const { markets, note } = await fetchMarketsBySlug(spreadSlug, logger);
     if (!markets.length) {
-      logger('Kalshi spread skipped: no markets found for slug', cfg.slug, note ?? '');
+      logger('Kalshi spread skipped: no markets found for spread slug', spreadSlug, note ?? '');
       recordLiveEvent({
         side,
         kind: 'spread',
         ticker: null,
         count: cfg.betUnitSize,
         note: note ?? 'no-markets',
-        details: { slug: cfg.slug, suffix: targetSuffix }
+        details: { slug: spreadSlug, suffix: targetSuffix }
       });
       return { ok: true, skippedReason: 'no-markets' };
     }
@@ -505,7 +509,10 @@ async function placeSpread(cfg: KalshiConfig, side: TriggerSide, logger: (...arg
         ticker: null,
         count: cfg.betUnitSize,
         note: 'no-spread-in-band',
-        details: { suffix: targetSuffix, sample: candidates.slice(0, 5) }
+        details: {
+          suffix: targetSuffix,
+          candidates
+        }
       });
       return { ok: true, skippedReason: 'no-spread-in-band' };
     }
@@ -581,15 +588,33 @@ async function placeSpread(cfg: KalshiConfig, side: TriggerSide, logger: (...arg
   }
 }
 
-function pickPrice(market: { yes_bid?: number; yes_ask?: number; last_price?: number }): number | null {
-  const bid = coerceNum(market.yes_bid);
-  const ask = coerceNum(market.yes_ask);
-  const last = coerceNum(market.last_price);
-  if (bid !== null && ask !== null) {
-    return Math.round((bid + ask) / 2);
+function pickPrice(market: {
+  yes_bid?: number;
+  yes_ask?: number;
+  no_bid?: number;
+  no_ask?: number;
+  last_price?: number;
+  yes_bid_dollars?: string;
+  yes_ask_dollars?: string;
+  no_bid_dollars?: string;
+  no_ask_dollars?: string;
+  last_price_dollars?: string;
+}): number | null {
+  const yesBid = coerceNum(market.yes_bid) ?? coerceDollar(market.yes_bid_dollars);
+  const yesAsk = coerceNum(market.yes_ask) ?? coerceDollar(market.yes_ask_dollars);
+  const noBid = coerceNum(market.no_bid) ?? coerceDollar(market.no_bid_dollars);
+  const noAsk = coerceNum(market.no_ask) ?? coerceDollar(market.no_ask_dollars);
+  const last = coerceNum(market.last_price) ?? coerceDollar(market.last_price_dollars);
+  if (yesBid !== null && yesAsk !== null) {
+    return Math.round((yesBid + yesAsk) / 2);
   }
-  if (bid !== null) return bid;
-  if (ask !== null) return ask;
+  if (yesBid !== null) return yesBid;
+  if (yesAsk !== null) return yesAsk;
+  if (noBid !== null && noAsk !== null) {
+    return Math.round((noBid + noAsk) / 2);
+  }
+  if (noBid !== null) return noBid;
+  if (noAsk !== null) return noAsk;
   if (last !== null) return last;
   return null;
 }
@@ -599,6 +624,13 @@ function coerceNum(value: unknown): number | null {
     return value;
   }
   return null;
+}
+
+function coerceDollar(str: unknown): number | null {
+  if (typeof str !== 'string') return null;
+  const num = Number.parseFloat(str);
+  if (!Number.isFinite(num)) return null;
+  return Math.round(num * 100);
 }
 
 function isMoneylineTicker(ticker: string) {

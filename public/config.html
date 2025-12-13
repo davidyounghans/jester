@@ -128,6 +128,10 @@
           Event slug (full Kalshi event ticker, e.g., KXNBAGAME-25DEC12ATLDET)
           <input type="text" id="slug" placeholder="KXNBAGAME-25DEC12ATLDET" />
         </label>
+        <label>
+          Spread slug (optional, e.g., KXNBASPREAD-25DEC12ATLDET)
+          <input type="text" id="spreadSlug" placeholder="KXNBASPREAD-..." />
+        </label>
         <div class="grid">
           <label>
             Home ticker suffix (e.g., ORL)
@@ -186,6 +190,7 @@
 
       const enabledInput = document.querySelector('#enabled');
       const slugInput = document.querySelector('#slug');
+      const spreadSlugInput = document.querySelector('#spreadSlug');
       const homeSuffixInput = document.querySelector('#homeSuffix');
       const awaySuffixInput = document.querySelector('#awaySuffix');
       const unitInput = document.querySelector('#betUnitSize');
@@ -217,6 +222,7 @@
         const payload = {
           enabled: enabledInput.checked,
           slug: slugInput.value,
+          spreadSlug: spreadSlugInput.value,
           homeSuffix: homeSuffixInput.value,
           awaySuffix: awaySuffixInput.value,
           betUnitSize: Number(unitInput.value) || 1,
@@ -270,6 +276,7 @@
       function populateForm(config) {
         enabledInput.checked = !!config.enabled;
         slugInput.value = config.slug ?? '';
+        spreadSlugInput.value = config.spreadSlug ?? '';
         homeSuffixInput.value = config.homeSuffix ?? '';
         awaySuffixInput.value = config.awaySuffix ?? '';
         unitInput.value = config.betUnitSize ?? 1;
