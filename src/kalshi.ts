@@ -167,7 +167,7 @@ async function signedFetch(pathname: string, method: string, body: unknown, time
   const isBodyAllowed = method.toUpperCase() !== 'GET' && method.toUpperCase() !== 'HEAD';
   const serializedBody = isBodyAllowed && body ? JSON.stringify(body) : '';
   const timestamp = Date.now().toString();
-  const signaturePayload = `${timestamp}${method.toUpperCase()}${url.pathname}${url.search ?? ''}${serializedBody}`;
+  const signaturePayload = `${timestamp}${method.toUpperCase()}${url.pathname}${url.search ?? ''}`;
 
   const signer = crypto.createSign('RSA-SHA256');
   signer.update(signaturePayload);
@@ -223,7 +223,7 @@ function buildSignaturePayload(pathname: string, method: string, body: unknown) 
   const isBodyAllowed = method.toUpperCase() !== 'GET' && method.toUpperCase() !== 'HEAD';
   const serializedBody = isBodyAllowed && body ? JSON.stringify(body) : '';
   const timestamp = Date.now().toString();
-  const signaturePayload = `${timestamp}${method.toUpperCase()}${url.pathname}${url.search ?? ''}${serializedBody}`;
+  const signaturePayload = `${timestamp}${method.toUpperCase()}${url.pathname}${url.search ?? ''}`;
   return { url, timestamp, signaturePayload, serializedBody };
 }
 
