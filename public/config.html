@@ -130,12 +130,12 @@
         </label>
         <div class="grid">
           <label>
-            Home (choose YES or NO)
-            <input type="text" id="homeSide" placeholder="YES or NO" />
+            Home ML ticker (e.g., KXNBAGAME-25DEC13NYKORL-NYK)
+            <input type="text" id="homeTicker" placeholder="home ML ticker" />
           </label>
           <label>
-            Away (choose YES or NO)
-            <input type="text" id="awaySide" placeholder="YES or NO" />
+            Away ML ticker (e.g., KXNBAGAME-25DEC13NYKORL-ORL)
+            <input type="text" id="awayTicker" placeholder="away ML ticker" />
           </label>
         </div>
         <label>
@@ -186,8 +186,8 @@
 
       const enabledInput = document.querySelector('#enabled');
       const slugInput = document.querySelector('#slug');
-      const homeSideInput = document.querySelector('#homeSide');
-      const awaySideInput = document.querySelector('#awaySide');
+      const homeTickerInput = document.querySelector('#homeTicker');
+      const awayTickerInput = document.querySelector('#awayTicker');
       const unitInput = document.querySelector('#betUnitSize');
       const testModeInput = document.querySelector('#testMode');
       const moneylineEnabledInput = document.querySelector('#moneylineEnabled');
@@ -217,8 +217,8 @@
         const payload = {
           enabled: enabledInput.checked,
           slug: slugInput.value,
-          homeSide: homeSideInput.value,
-          awaySide: awaySideInput.value,
+          homeTicker: homeTickerInput.value,
+          awayTicker: awayTickerInput.value,
           betUnitSize: Number(unitInput.value) || 1,
           moneylineEnabled: moneylineEnabledInput.checked,
           spreadEnabled: spreadEnabledInput.checked,
@@ -270,8 +270,8 @@
       function populateForm(config) {
         enabledInput.checked = !!config.enabled;
         slugInput.value = config.slug ?? '';
-        homeSideInput.value = config.homeSide ?? '';
-        awaySideInput.value = config.awaySide ?? '';
+        homeTickerInput.value = config.homeTicker ?? '';
+        awayTickerInput.value = config.awayTicker ?? '';
         unitInput.value = config.betUnitSize ?? 1;
         testModeInput.checked = !!config.testMode;
         moneylineEnabledInput.checked = config.moneylineEnabled ?? true;

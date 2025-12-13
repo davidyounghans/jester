@@ -9,8 +9,8 @@ export interface KalshiConfig {
   moneylineEnabled: boolean;
   spreadEnabled: boolean;
   slug: string; // Event ticker slug, e.g., KXNBAGAME-25DEC12ATLDET
-  homeSide: 'YES' | 'NO'; // which side to use when HOME is pressed
-  awaySide: 'YES' | 'NO'; // which side to use when AWAY is pressed
+  homeTicker: string; // full ML ticker for Home button
+  awayTicker: string; // full ML ticker for Away button
   betUnitSize: number;
   testMode: boolean;
 }
@@ -50,8 +50,8 @@ const defaultConfig: KalshiConfig = {
   moneylineEnabled: true,
   spreadEnabled: false,
   slug: '',
-  homeSide: 'YES',
-  awaySide: 'NO',
+  homeTicker: '',
+  awayTicker: '',
   betUnitSize: 1,
   testMode: true
 };
@@ -83,8 +83,8 @@ export function updateKalshiConfig(partial: Partial<KalshiConfig>): KalshiConfig
     spreadEnabled: partial.spreadEnabled ?? runtimeConfig.spreadEnabled,
     betUnitSize: normalizeUnitSize(partial.betUnitSize ?? runtimeConfig.betUnitSize),
     slug: sanitizeSlug(partial.slug ?? runtimeConfig.slug),
-    homeSide: sanitizeSide(partial.homeSide ?? runtimeConfig.homeSide),
-    awaySide: sanitizeSide(partial.awaySide ?? runtimeConfig.awaySide),
+    homeTicker: sanitizeSlug(partial.homeTicker ?? runtimeConfig.homeTicker),
+    awayTicker: sanitizeSlug(partial.awayTicker ?? runtimeConfig.awayTicker),
     testMode: partial.testMode ?? runtimeConfig.testMode
   };
 
@@ -276,11 +276,6 @@ function sanitizeSlug(value: string | undefined) {
   return (value ?? '').trim().toUpperCase().replace(/[^A-Z0-9_.-]/g, '');
 }
 
-function sanitizeSide(value: string | undefined): 'YES' | 'NO' {
-  const v = (value ?? '').trim().toUpperCase();
-  return v === 'NO' ? 'NO' : 'YES';
-}
-
 function recordTestEvent(event: { ticker: string; side: TriggerSide; count: number; body: unknown }) {
   testEventLog.push({ ...event, at: Date.now() });
   if (testEventLog.length > 100) {
@@ -357,56 +352,36 @@ async function fetchMarketsBySlug(slug: string, logger: (...args: unknown[]) => 
 }
 
 async function placeMoneyline(cfg: KalshiConfig, side: TriggerSide, logger: (...args: unknown[]) => void): Promise<KalshiResult> {
-  const slug = cfg.slug;
-  if (!slug) {
-    logger('Kalshi skipped: missing event slug for moneyline');
-    return { ok: true, skippedReason: 'missing-slug' };
-  }
-  const chosenSide = side === 'home' ? cfg.homeSide : cfg.awaySide;
-
-  const { markets, eventTicker, note } = await fetchMarketsBySlug(slug, logger);
-  if (!markets.length) {
-    logger('Kalshi moneyline skipped: no markets found for slug', slug, note ?? '');
-    recordLiveEvent({
-      side,
-      kind: 'moneyline',
-      ticker: null,
-      count: cfg.betUnitSize,
-      note: note ?? 'no-markets',
-      details: { sample: markets.slice(0, 5).map((m) => m.ticker).filter(Boolean), slug }
-    });
-    return { ok: true, skippedReason: 'no-markets' };
-  }
-
-  const mlCandidates = markets
-    .map((m) => {
-      const ticker = m.ticker ?? '';
-      return { ticker };
-    })
-    .filter((m) => isMoneylineTicker(m.ticker));
-
-  mlCandidates.sort((a, b) => a.ticker.localeCompare(b.ticker));
-  const ticker = mlCandidates[0]?.ticker ?? null;
+  const ticker = side === 'home' ? cfg.homeTicker : cfg.awayTicker;
   if (!ticker) {
-    logger('Kalshi moneyline skipped: no ML market found for slug', slug);
+    logger('Kalshi moneyline skipped: missing ticker for side', side);
     recordLiveEvent({
       side,
       kind: 'moneyline',
       ticker: null,
       count: cfg.betUnitSize,
-      note: `no-moneyline-market`,
-      details: { slug, sample: markets.slice(0, 10).map((m) => m.ticker).filter(Boolean) }
+      note: 'missing-ticker'
     });
-    return { ok: true, skippedReason: 'no-moneyline' };
+    return { ok: true, skippedReason: 'missing-ticker' };
+  }
+
+  // Derive a price from the matching market if available
+  let price = 50;
+  const { markets, eventTicker, note } = await fetchMarketsBySlug(cfg.slug, logger);
+  if (markets?.length) {
+    const match = markets.find((m) => (m.ticker ?? '').toUpperCase() === ticker.toUpperCase());
+    if (match) {
+      price = computeYesSidePrice(match);
+    }
   }
 
   const orderBody = {
     ticker,
-    side: chosenSide.toLowerCase(),
+    side: 'yes',
     action: 'buy',
     count: cfg.betUnitSize,
     type: 'market',
-    yes_price: 99
+    yes_price: price
   };
 
   if (cfg.testMode) {
@@ -494,6 +469,14 @@ function isMoneylineTicker(ticker: string) {
 function isSpreadTicker(ticker: string) {
   const up = ticker.toUpperCase();
   return up.includes('SP');
+}
+
+function computeYesSidePrice(market: { yes_ask?: number; last_price?: number }) {
+  const yesAsk = coerceNum(market.yes_ask);
+  const last = coerceNum(market.last_price);
+  const base = yesAsk ?? last ?? 50;
+  const bumped = base + 3;
+  return Math.max(1, Math.min(99, bumped));
 }
 
 async function logBalanceOnly(cfgSide: TriggerSide, logger: (...args: unknown[]) => void): Promise<KalshiResult> {
