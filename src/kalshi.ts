@@ -502,34 +502,37 @@ async function placeSpread(cfg: KalshiConfig, side: TriggerSide, logger: (...arg
       return { ok: true, skippedReason: 'no-markets' };
     }
 
-    const candidates = markets
-      .map((m) => {
-        const ticker = m.ticker ?? '';
-        const price = pickPrice(m);
-        return { ticker, price };
-      })
-      .filter((m) => isSpreadTicker(m.ticker) && m.ticker.toUpperCase().includes(targetSuffix) && m.price !== null);
-
-    const inBand = candidates.filter((c) => c.price! >= 40 && c.price! <= 60);
-    if (!inBand.length) {
-      logger('Kalshi spread skipped: no spreads in 40-60 band', targetSuffix);
+    const targetTicker = `${spreadSlug}-${suffix}`;
+    const match = markets.find((m) => (m.ticker ?? '').toUpperCase() === targetTicker.toUpperCase());
+    if (!match) {
+      logger('Kalshi spread skipped: no spread ticker match', targetTicker);
       recordLiveEvent({
         side,
         kind: 'spread',
         ticker: null,
         count: cfg.betUnitSize,
-        note: 'no-spread-in-band',
-        details: {
-          suffix: targetSuffix,
-          candidates
-        }
+        note: 'no-spread-ticker-match',
+        details: { targetTicker, suffix: targetSuffix }
       });
-      return { ok: true, skippedReason: 'no-spread-in-band' };
+      return { ok: true, skippedReason: 'no-spread-ticker' };
     }
 
-    inBand.sort((a, b) => Math.abs((a.price ?? 0) - 50) - Math.abs((b.price ?? 0) - 50));
-    chosenTicker = inBand[0].ticker;
-    chosenPrice = inBand[0].price ?? 50;
+    const price = pickPrice(match);
+    if (price === null || price < 40 || price > 60) {
+      logger('Kalshi spread skipped: price out of band', targetTicker, price);
+      recordLiveEvent({
+        side,
+        kind: 'spread',
+        ticker: targetTicker,
+        count: cfg.betUnitSize,
+        note: 'spread-price-out-of-band',
+        details: { price }
+      });
+      return { ok: true, skippedReason: 'spread-price-out-of-band' };
+    }
+
+    chosenTicker = targetTicker;
+    chosenPrice = price;
 
     const orderBody = {
       ticker: chosenTicker,
