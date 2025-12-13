@@ -502,37 +502,30 @@ async function placeSpread(cfg: KalshiConfig, side: TriggerSide, logger: (...arg
       return { ok: true, skippedReason: 'no-markets' };
     }
 
-    const targetTicker = `${spreadSlug}-${suffix}`;
-    const match = markets.find((m) => (m.ticker ?? '').toUpperCase() === targetTicker.toUpperCase());
-    if (!match) {
-      logger('Kalshi spread skipped: no spread ticker match', targetTicker);
+    const spreadMarkets = markets.filter((m) => isSpreadTicker(m.ticker ?? ''));
+    const preferred = spreadMarkets.filter((m) => (m.ticker ?? '').toUpperCase().includes(targetSuffix));
+    const pool = preferred.length ? preferred : spreadMarkets;
+    const candidates = pool
+      .map((m) => ({ ticker: m.ticker ?? '', price: pickPrice(m) }))
+      .filter((m) => m.price !== null) as Array<{ ticker: string; price: number }>;
+
+    const inBand = candidates.filter((c) => c.price! >= 40 && c.price! <= 60);
+    if (!inBand.length) {
+      logger('Kalshi spread skipped: no spreads in 40-60 band', targetSuffix);
       recordLiveEvent({
         side,
         kind: 'spread',
         ticker: null,
         count: cfg.betUnitSize,
-        note: 'no-spread-ticker-match',
-        details: { targetTicker, suffix: targetSuffix }
+        note: 'no-spread-in-band',
+        details: { suffix: targetSuffix, candidates }
       });
-      return { ok: true, skippedReason: 'no-spread-ticker' };
+      return { ok: true, skippedReason: 'no-spread-in-band' };
     }
 
-    const price = pickPrice(match);
-    if (price === null || price < 40 || price > 60) {
-      logger('Kalshi spread skipped: price out of band', targetTicker, price);
-      recordLiveEvent({
-        side,
-        kind: 'spread',
-        ticker: targetTicker,
-        count: cfg.betUnitSize,
-        note: 'spread-price-out-of-band',
-        details: { price }
-      });
-      return { ok: true, skippedReason: 'spread-price-out-of-band' };
-    }
-
-    chosenTicker = targetTicker;
-    chosenPrice = price;
+    inBand.sort((a, b) => Math.abs((a.price ?? 0) - 50) - Math.abs((b.price ?? 0) - 50));
+    chosenTicker = inBand[0].ticker;
+    chosenPrice = inBand[0].price ?? 50;
 
     const orderBody = {
       ticker: chosenTicker,
