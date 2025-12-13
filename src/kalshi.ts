@@ -503,38 +503,62 @@ async function placeSpread(cfg: KalshiConfig, side: TriggerSide, logger: (...arg
     }
 
     const spreadMarkets = markets.filter((m) => isSpreadTicker(m.ticker ?? ''));
-    const preferred = spreadMarkets.filter((m) => (m.ticker ?? '').toUpperCase().includes(targetSuffix));
-    const pool = preferred.length ? preferred : spreadMarkets;
-    const candidates = pool
-      .map((m) => ({ ticker: m.ticker ?? '', price: pickPrice(m) }))
-      .filter((m) => m.price !== null) as Array<{ ticker: string; price: number }>;
+    const enriched = spreadMarkets
+      .map((m) => {
+        const ticker = m.ticker ?? '';
+        const price = pickPrice(m);
+        const team = extractSpreadTeamCode(ticker);
+        return { ticker, price, team };
+      })
+      .filter((m) => m.price !== null) as Array<{ ticker: string; price: number; team: string | null }>;
 
-    const inBand = candidates.filter((c) => c.price! >= 40 && c.price! <= 60);
-    if (!inBand.length) {
-      logger('Kalshi spread skipped: no spreads in 40-60 band', targetSuffix);
+    const inBand = enriched.filter((c) => c.price! >= 40 && c.price! <= 60);
+    const targetMatches = inBand.filter((m) => m.team === targetSuffix);
+    const otherSuffix = side === 'home' ? cfg.awaySuffix.toUpperCase() : cfg.homeSuffix.toUpperCase();
+    const otherMatches = inBand.filter((m) => m.team === otherSuffix);
+
+    const selectClosest = (list: Array<{ ticker: string; price: number }>) =>
+      [...list].sort((a, b) => Math.abs((a.price ?? 0) - 50) - Math.abs((b.price ?? 0) - 50))[0];
+
+    if (targetMatches.length) {
+      const pick = selectClosest(targetMatches);
+      chosenTicker = pick.ticker;
+      chosenPrice = pick.price;
+    } else if (otherMatches.length) {
+      const pick = selectClosest(otherMatches);
+      chosenTicker = pick.ticker;
+      chosenPrice = pick.price;
+    } else {
+      logger('Kalshi spread skipped: no spreads in 40-60 band for teams', targetSuffix, otherSuffix);
       recordLiveEvent({
         side,
         kind: 'spread',
         ticker: null,
         count: cfg.betUnitSize,
         note: 'no-spread-in-band',
-        details: { suffix: targetSuffix, candidates }
+        details: { suffixes: [targetSuffix, otherSuffix], candidates: inBand }
       });
       return { ok: true, skippedReason: 'no-spread-in-band' };
     }
 
-    inBand.sort((a, b) => Math.abs((a.price ?? 0) - 50) - Math.abs((b.price ?? 0) - 50));
-    chosenTicker = inBand[0].ticker;
-    chosenPrice = inBand[0].price ?? 50;
-
-    const orderBody = {
-      ticker: chosenTicker,
-      side: 'yes',
-      action: 'buy',
-      count: cfg.betUnitSize,
-      type: 'market',
-      yes_price: chosenPrice
-    };
+    const orderBody =
+      targetMatches.length > 0
+        ? {
+            ticker: chosenTicker,
+            side: 'yes',
+            action: 'buy',
+            count: cfg.betUnitSize,
+            type: 'market',
+            yes_price: chosenPrice!
+          }
+        : {
+            ticker: chosenTicker,
+            side: 'no',
+            action: 'buy',
+            count: cfg.betUnitSize,
+            type: 'market',
+            no_price: chosenPrice!
+          };
 
     if (cfg.testMode) {
       recordTestEvent({
@@ -650,6 +674,11 @@ function isMoneylineTicker(ticker: string) {
 function isSpreadTicker(ticker: string) {
   const up = ticker.toUpperCase();
   return up.includes('SP');
+}
+
+function extractSpreadTeamCode(ticker: string): string | null {
+  const m = ticker.toUpperCase().match(/-([A-Z]{2,5})\d+$/);
+  return m ? m[1] : null;
 }
 
 function computeYesSidePrice(market: { yes_ask?: number; last_price?: number }) {
