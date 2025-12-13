@@ -78,14 +78,16 @@ export function getKalshiConfig(): KalshiConfig {
 }
 
 export function updateKalshiConfig(partial: Partial<KalshiConfig>): KalshiConfig {
+  const nextSlug = sanitizeSlug(partial.slug ?? runtimeConfig.slug);
+  const nextSpreadSlug = sanitizeSlug(partial.spreadSlug ?? runtimeConfig.spreadSlug) || deriveSpreadSlug(nextSlug);
   const next: KalshiConfig = {
     ...runtimeConfig,
     ...partial,
     moneylineEnabled: partial.moneylineEnabled ?? runtimeConfig.moneylineEnabled,
     spreadEnabled: partial.spreadEnabled ?? runtimeConfig.spreadEnabled,
     betUnitSize: normalizeUnitSize(partial.betUnitSize ?? runtimeConfig.betUnitSize),
-    slug: sanitizeSlug(partial.slug ?? runtimeConfig.slug),
-    spreadSlug: sanitizeSlug(partial.spreadSlug ?? runtimeConfig.spreadSlug),
+    slug: nextSlug,
+    spreadSlug: nextSpreadSlug,
     homeSuffix: sanitizeSlug(partial.homeSuffix ?? runtimeConfig.homeSuffix),
     awaySuffix: sanitizeSlug(partial.awaySuffix ?? runtimeConfig.awaySuffix),
     testMode: partial.testMode ?? runtimeConfig.testMode
@@ -285,6 +287,14 @@ async function safeReadText(response: Response) {
 
 function sanitizeSlug(value: string | undefined) {
   return (value ?? '').trim().toUpperCase().replace(/[^A-Z0-9_.-]/g, '');
+}
+
+function deriveSpreadSlug(gameSlug: string) {
+  if (!gameSlug) return '';
+  if (gameSlug.startsWith('KXNBAGAME')) {
+    return gameSlug.replace('KXNBAGAME', 'KXNBASPREAD');
+  }
+  return gameSlug;
 }
 
 function recordTestEvent(event: { ticker: string; side: TriggerSide; count: number; body: unknown }) {
