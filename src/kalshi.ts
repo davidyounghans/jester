@@ -408,7 +408,8 @@ async function placeMoneyline(cfg: KalshiConfig, side: TriggerSide, logger: (...
     side: 'yes',
     action: 'buy',
     count: cfg.betUnitSize,
-    type: 'market'
+    type: 'market',
+    yes_price: 99
   };
 
   if (cfg.testMode) {
@@ -430,14 +431,17 @@ async function placeMoneyline(cfg: KalshiConfig, side: TriggerSide, logger: (...
       logger('Kalshi moneyline rejected', response.status, text);
       recordLiveEvent({
         side,
-        kind: 'moneyline',
-        ticker,
-        count: cfg.betUnitSize,
-        status: response.status,
-        responseBody: text || undefined,
-        note: eventTicker ?? undefined,
-        details: response.status === 401 ? getLastSignatureSnapshot() : undefined
-      });
+      kind: 'moneyline',
+      ticker,
+      count: cfg.betUnitSize,
+      status: response.status,
+      responseBody: text || undefined,
+      note: eventTicker ?? undefined,
+      details:
+        response.status === 401
+          ? { ...getLastSignatureSnapshot(), body: orderBody }
+          : { body: orderBody }
+    });
       return { ok: false, error: `Kalshi request failed (${response.status})` };
     }
 
@@ -582,7 +586,8 @@ async function placeSpread(cfg: KalshiConfig, side: TriggerSide, logger: (...arg
       side: 'yes',
       action: 'buy',
       count: cfg.betUnitSize,
-      type: 'market'
+      type: 'market',
+      yes_price: chosenPrice ?? 50
     };
 
     if (cfg.testMode) {
@@ -609,7 +614,10 @@ async function placeSpread(cfg: KalshiConfig, side: TriggerSide, logger: (...arg
       status: response.status,
       responseBody: text || undefined,
       note: chosenPrice !== null ? `price~${chosenPrice}` : undefined,
-      details: response.status === 401 ? getLastSignatureSnapshot() : undefined
+      details:
+        response.status === 401
+          ? { ...getLastSignatureSnapshot(), body: orderBody }
+          : { body: orderBody }
     });
     return { ok: false, error: `Kalshi request failed (${response.status})` };
     }
