@@ -7,6 +7,7 @@ import {
   clearLiveEvents,
   clearTestEvents,
   getKalshiBalanceSnapshot,
+  getKalshiEnvInfo,
   getKalshiConfig,
   getLiveEvents,
   getTestEvents,
@@ -96,8 +97,9 @@ const httpServer = http.createServer(async (req: IncomingMessage, res: ServerRes
 
     if (req.method === 'GET' && url.pathname === '/config/kalshi/test') {
       const balance = await getKalshiBalanceSnapshot();
+      const env = getKalshiEnvInfo();
       res.writeHead(200, defaultJsonHeaders());
-      res.end(JSON.stringify({ events: getTestEvents(), balance }));
+      res.end(JSON.stringify({ events: getTestEvents(), balance, env }));
       return;
     }
 
@@ -110,8 +112,9 @@ const httpServer = http.createServer(async (req: IncomingMessage, res: ServerRes
 
     if (req.method === 'GET' && url.pathname === '/config/kalshi/live') {
       const balance = await getKalshiBalanceSnapshot();
+      const env = getKalshiEnvInfo();
       res.writeHead(200, defaultJsonHeaders());
-      res.end(JSON.stringify({ events: getLiveEvents(), balance }));
+      res.end(JSON.stringify({ events: getLiveEvents(), balance, env }));
       return;
     }
 

@@ -98,6 +98,16 @@ export function clearLiveEvents() {
   liveEventLog.length = 0;
 }
 
+export function getKalshiEnvInfo() {
+  const accessKey = ACCESS_KEY ?? '';
+  const priv = PRIVATE_KEY ?? '';
+  return {
+    apiBase: API_BASE,
+    accessKeyPrefix: accessKey ? `${accessKey.slice(0, 4)}...${accessKey.slice(-4)}` : '',
+    privateKeyHead: priv ? priv.split('\n')[0] ?? '' : ''
+  };
+}
+
 export async function getKalshiBalanceSnapshot(): Promise<{ balance?: number | null; error?: string }> {
   if (!ACCESS_KEY || !PRIVATE_KEY) {
     return { error: 'missing-credentials' };
