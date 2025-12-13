@@ -212,6 +212,16 @@ async function signedFetch(pathname: string, method: string, body: unknown, time
   }
 }
 
+function buildSignaturePayload(pathname: string, method: string, body: unknown) {
+  const { fullPath } = normalizeApiPath(pathname);
+  const url = new URL(fullPath, API_BASE);
+  const isBodyAllowed = method.toUpperCase() !== 'GET' && method.toUpperCase() !== 'HEAD';
+  const serializedBody = isBodyAllowed && body ? JSON.stringify(body) : '';
+  const timestamp = Date.now().toString();
+  const signaturePayload = `${timestamp}${method.toUpperCase()}${url.pathname}${url.search ?? ''}${serializedBody}`;
+  return { url, timestamp, signaturePayload, serializedBody };
+}
+
 function loadConfigFromDisk(): KalshiConfig {
   try {
     if (fs.existsSync(CONFIG_PATH)) {
@@ -403,6 +413,8 @@ async function placeMoneyline(cfg: KalshiConfig, side: TriggerSide, logger: (...
     return { ok: false, skippedReason: 'missing-credentials', error: 'Missing KALSHI_ACCESS_KEY or KALSHI_PRIVATE_KEY' };
   }
 
+  const envInfo = getKalshiEnvInfo();
+
   try {
     const response = await signedFetch('/portfolio/orders', 'POST', orderBody);
     if (!response.ok) {
@@ -416,17 +428,29 @@ async function placeMoneyline(cfg: KalshiConfig, side: TriggerSide, logger: (...
         count: cfg.betUnitSize,
         status: response.status,
         responseBody: text || undefined,
-        note: eventTicker ?? undefined
+        note: eventTicker ?? undefined,
+        details:
+          response.status === 401
+            ? { ...buildSignaturePayload('/portfolio/orders', 'POST', orderBody), env: envInfo }
+            : { env: envInfo }
       });
       return { ok: false, error: `Kalshi request failed (${response.status})` };
     }
 
     logger('Kalshi moneyline placed', ticker, cfg.betUnitSize);
-    recordLiveEvent({ side, kind: 'moneyline', ticker, count: cfg.betUnitSize, status: response.status, note: eventTicker ?? undefined });
+    recordLiveEvent({
+      side,
+      kind: 'moneyline',
+      ticker,
+      count: cfg.betUnitSize,
+      status: response.status,
+      note: eventTicker ?? undefined,
+      details: { env: envInfo }
+    });
     return { ok: true };
   } catch (error) {
     logger('Kalshi moneyline error', error);
-    recordLiveEvent({ side, kind: 'moneyline', ticker, count: cfg.betUnitSize, error: (error as Error).message });
+    recordLiveEvent({ side, kind: 'moneyline', ticker, count: cfg.betUnitSize, error: (error as Error).message, details: { env: envInfo } });
     return { ok: false, error: (error as Error).message };
   }
 }
@@ -468,6 +492,8 @@ async function placeSpread(cfg: KalshiConfig, side: TriggerSide, logger: (...arg
     logger('Kalshi spread disabled: missing credentials');
     return { ok: false, skippedReason: 'missing-credentials', error: 'Missing KALSHI_ACCESS_KEY or KALSHI_PRIVATE_KEY' };
   }
+
+  const envInfo = getKalshiEnvInfo();
 
   try {
     if (cfg.testMode && (!ACCESS_KEY || !PRIVATE_KEY)) {
@@ -581,7 +607,11 @@ async function placeSpread(cfg: KalshiConfig, side: TriggerSide, logger: (...arg
         count: cfg.betUnitSize,
         status: response.status,
         responseBody: text || undefined,
-        note: chosenPrice !== null ? `price~${chosenPrice}` : undefined
+        note: chosenPrice !== null ? `price~${chosenPrice}` : undefined,
+        details:
+          response.status === 401
+            ? { ...buildSignaturePayload('/portfolio/orders', 'POST', orderBody), env: envInfo }
+            : { env: envInfo }
       });
       return { ok: false, error: `Kalshi request failed (${response.status})` };
     }
@@ -593,13 +623,14 @@ async function placeSpread(cfg: KalshiConfig, side: TriggerSide, logger: (...arg
       ticker: chosenTicker,
       count: cfg.betUnitSize,
       status: response.status,
-      note: chosenPrice !== null ? `price~${chosenPrice}` : undefined
+      note: chosenPrice !== null ? `price~${chosenPrice}` : undefined,
+      details: { env: envInfo }
     });
     return { ok: true };
   } catch (error) {
     const message = (error as Error).message ?? 'spread-error';
     logger('Kalshi spread error', message);
-    recordLiveEvent({ side, kind: 'spread', ticker: chosenTicker, count: cfg.betUnitSize, error: message });
+    recordLiveEvent({ side, kind: 'spread', ticker: chosenTicker, count: cfg.betUnitSize, error: message, details: { env: envInfo } });
     if (cfg.testMode) {
       recordTestEvent({
         ticker: chosenTicker ?? 'unknown',
