@@ -135,24 +135,9 @@ export async function handleKalshiTrigger(side: TriggerSide, logger: (...args: u
     return { ok: true, skippedReason: 'module-disabled' };
   }
 
-  if (!cfg.slug) return { ok: true, skippedReason: 'missing-slug' };
-  if (!cfg.yesTeamCode || !cfg.noTeamCode) return { ok: true, skippedReason: 'missing-team-codes' };
-
-  const results: KalshiResult[] = [];
-
-  if (cfg.moneylineEnabled) {
-    results.push(await placeMoneyline(cfg, side, logger));
-  }
-
-  if (cfg.spreadEnabled) {
-    results.push(await placeSpread(cfg, side, logger));
-  }
-
-  if (results.length === 0) {
-    return { ok: true, skippedReason: 'no-modules-enabled' };
-  }
-
-  return results.every((r) => r.ok) ? { ok: true } : { ok: false, error: 'one-or-more-orders-failed' };
+  // Temporarily: no orders, just log current balance when a signal arrives.
+  const result = await logBalanceOnly(side, logger);
+  return result;
 }
 
 function normalizeApiPath(pathname: string) {
@@ -672,4 +657,46 @@ function isMoneylineTicker(ticker: string) {
 function isSpreadTicker(ticker: string) {
   const up = ticker.toUpperCase();
   return up.includes('SP');
+}
+
+async function logBalanceOnly(cfgSide: TriggerSide, logger: (...args: unknown[]) => void): Promise<KalshiResult> {
+  const envInfo = getKalshiEnvInfo();
+  try {
+    const res = await signedFetch('/portfolio/balance', 'GET', '');
+    const text = await safeReadText(res);
+    const note = `balance-status-${res.status}`;
+    let balance: number | null = null;
+    try {
+      const json = JSON.parse(text);
+      if (typeof json?.balance === 'number') balance = json.balance;
+    } catch {
+      // ignore parse errors
+    }
+
+    recordLiveEvent({
+      side: cfgSide,
+      kind: 'moneyline',
+      ticker: 'balance-only',
+      count: 0,
+      status: res.status,
+      responseBody: text || undefined,
+      note,
+      details: { env: envInfo, balance }
+    });
+
+    if (!res.ok) {
+      return { ok: false, error: `balance-fetch-${res.status}` };
+    }
+    return { ok: true };
+  } catch (error) {
+    recordLiveEvent({
+      side: cfgSide,
+      kind: 'moneyline',
+      ticker: 'balance-only',
+      count: 0,
+      error: (error as Error).message,
+      details: { env: envInfo }
+    });
+    return { ok: false, error: (error as Error).message };
+  }
 }
