@@ -9,8 +9,8 @@ export interface KalshiConfig {
   moneylineEnabled: boolean;
   spreadEnabled: boolean;
   slug: string; // Event ticker slug, e.g., KXNBAGAME-25DEC12ATLDET
-  yesTeamCode: string; // team code to back with "yes" for HOME press
-  noTeamCode: string; // team code to back with "yes" for AWAY press
+  homeSide: 'YES' | 'NO'; // which side to use when HOME is pressed
+  awaySide: 'YES' | 'NO'; // which side to use when AWAY is pressed
   betUnitSize: number;
   testMode: boolean;
 }
@@ -50,8 +50,8 @@ const defaultConfig: KalshiConfig = {
   moneylineEnabled: true,
   spreadEnabled: false,
   slug: '',
-  yesTeamCode: '',
-  noTeamCode: '',
+  homeSide: 'YES',
+  awaySide: 'NO',
   betUnitSize: 1,
   testMode: true
 };
@@ -83,8 +83,8 @@ export function updateKalshiConfig(partial: Partial<KalshiConfig>): KalshiConfig
     spreadEnabled: partial.spreadEnabled ?? runtimeConfig.spreadEnabled,
     betUnitSize: normalizeUnitSize(partial.betUnitSize ?? runtimeConfig.betUnitSize),
     slug: sanitizeSlug(partial.slug ?? runtimeConfig.slug),
-    yesTeamCode: sanitizeSlug(partial.yesTeamCode ?? runtimeConfig.yesTeamCode),
-    noTeamCode: sanitizeSlug(partial.noTeamCode ?? runtimeConfig.noTeamCode),
+    homeSide: sanitizeSide(partial.homeSide ?? runtimeConfig.homeSide),
+    awaySide: sanitizeSide(partial.awaySide ?? runtimeConfig.awaySide),
     testMode: partial.testMode ?? runtimeConfig.testMode
   };
 
@@ -137,7 +137,6 @@ export async function handleKalshiTrigger(side: TriggerSide, logger: (...args: u
   }
 
   if (!cfg.slug) return { ok: true, skippedReason: 'missing-slug' };
-  if (!cfg.yesTeamCode || !cfg.noTeamCode) return { ok: true, skippedReason: 'missing-team-codes' };
 
   // First: log balance GET so we can confirm credentials/connectivity
   await logBalanceOnly(side, logger);
@@ -277,6 +276,11 @@ function sanitizeSlug(value: string | undefined) {
   return (value ?? '').trim().toUpperCase().replace(/[^A-Z0-9_.-]/g, '');
 }
 
+function sanitizeSide(value: string | undefined): 'YES' | 'NO' {
+  const v = (value ?? '').trim().toUpperCase();
+  return v === 'NO' ? 'NO' : 'YES';
+}
+
 function recordTestEvent(event: { ticker: string; side: TriggerSide; count: number; body: unknown }) {
   testEventLog.push({ ...event, at: Date.now() });
   if (testEventLog.length > 100) {
@@ -358,14 +362,7 @@ async function placeMoneyline(cfg: KalshiConfig, side: TriggerSide, logger: (...
     logger('Kalshi skipped: missing event slug for moneyline');
     return { ok: true, skippedReason: 'missing-slug' };
   }
-  const yesCode = sanitizeSlug(cfg.yesTeamCode);
-  const noCode = sanitizeSlug(cfg.noTeamCode);
-  if (!yesCode || !noCode) {
-    logger('Kalshi skipped: missing team codes for moneyline');
-    return { ok: true, skippedReason: 'missing-team-codes' };
-  }
-
-  const desiredCode = side === 'home' ? yesCode : noCode;
+  const chosenSide = side === 'home' ? cfg.homeSide : cfg.awaySide;
 
   const { markets, eventTicker, note } = await fetchMarketsBySlug(slug, logger);
   if (!markets.length) {
@@ -386,26 +383,26 @@ async function placeMoneyline(cfg: KalshiConfig, side: TriggerSide, logger: (...
       const ticker = m.ticker ?? '';
       return { ticker };
     })
-    .filter((m) => isMoneylineTicker(m.ticker) && m.ticker.toUpperCase().includes(desiredCode));
+    .filter((m) => isMoneylineTicker(m.ticker));
 
   mlCandidates.sort((a, b) => a.ticker.localeCompare(b.ticker));
   const ticker = mlCandidates[0]?.ticker ?? null;
   if (!ticker) {
-    logger('Kalshi moneyline skipped: no ML market found for slug/team', slug, desiredCode);
+    logger('Kalshi moneyline skipped: no ML market found for slug', slug);
     recordLiveEvent({
       side,
       kind: 'moneyline',
       ticker: null,
       count: cfg.betUnitSize,
       note: `no-moneyline-market`,
-      details: { slug, team: desiredCode, sample: markets.slice(0, 10).map((m) => m.ticker).filter(Boolean) }
+      details: { slug, sample: markets.slice(0, 10).map((m) => m.ticker).filter(Boolean) }
     });
     return { ok: true, skippedReason: 'no-moneyline' };
   }
 
   const orderBody = {
     ticker,
-    side: 'yes',
+    side: chosenSide.toLowerCase(),
     action: 'buy',
     count: cfg.betUnitSize,
     type: 'market',
@@ -463,189 +460,7 @@ async function placeMoneyline(cfg: KalshiConfig, side: TriggerSide, logger: (...
 }
 
 async function placeSpread(cfg: KalshiConfig, side: TriggerSide, logger: (...args: unknown[]) => void): Promise<KalshiResult> {
-  const slug = cfg.slug;
-  if (!slug) {
-    logger('Kalshi skipped: missing event slug for spread');
-    if (cfg.testMode) {
-      recordTestEvent({
-        ticker: 'unknown',
-        side,
-        count: cfg.betUnitSize,
-        body: { note: 'spread skipped: missing slug' }
-      });
-    }
-    return { ok: true, skippedReason: 'missing-slug' };
-  }
-  const yesCode = sanitizeSlug(cfg.yesTeamCode);
-  const noCode = sanitizeSlug(cfg.noTeamCode);
-  if (!yesCode || !noCode) {
-    logger('Kalshi skipped: missing team codes for spread');
-    if (cfg.testMode) {
-      recordTestEvent({
-        ticker: 'unknown',
-        side,
-        count: cfg.betUnitSize,
-        body: { note: 'spread skipped: missing team codes' }
-      });
-    }
-    return { ok: true, skippedReason: 'missing-team-codes' };
-  }
-
-  const desiredCode = side === 'home' ? yesCode : noCode;
-  let chosenTicker: string | null = null;
-  let chosenPrice: number | null = null;
-
-  if (!cfg.testMode && (!ACCESS_KEY || !PRIVATE_KEY)) {
-    logger('Kalshi spread disabled: missing credentials');
-    return { ok: false, skippedReason: 'missing-credentials', error: 'Missing KALSHI_ACCESS_KEY or KALSHI_PRIVATE_KEY' };
-  }
-
-  try {
-    if (cfg.testMode && (!ACCESS_KEY || !PRIVATE_KEY)) {
-      const fallbackTicker = `${slug}.SP.${desiredCode}`;
-      recordTestEvent({
-        ticker: fallbackTicker,
-        side,
-        count: cfg.betUnitSize,
-        body: { note: 'test-mode no credentials; markets not fetched' }
-      });
-      logger('Kalshi test mode: logged spread without credentials', fallbackTicker);
-      return { ok: true, skippedReason: 'test-mode-no-creds' };
-    }
-
-    const { markets, note } = await fetchMarketsBySlug(slug, logger);
-    if (!markets.length) {
-      logger('Kalshi spread skipped: no markets found for slug', slug, note ?? '');
-      if (cfg.testMode) {
-        recordTestEvent({
-          ticker: `${slug}`,
-          side,
-          count: cfg.betUnitSize,
-          body: { note: 'spread skipped: no markets found' }
-        });
-      }
-      recordLiveEvent({
-        side,
-        kind: 'spread',
-        ticker: null,
-        count: cfg.betUnitSize,
-        note: note ?? 'no-markets',
-        details: { sample: markets.slice(0, 5).map((m) => m.ticker).filter(Boolean) }
-      });
-      return { ok: true, skippedReason: 'no-markets' };
-    }
-
-    const candidates = markets
-      .map((m) => {
-        const ticker = m.ticker ?? '';
-        return { ticker, market: m };
-      })
-      .filter((m) => isSpreadTicker(m.ticker) && m.ticker.toUpperCase().includes(desiredCode));
-    const scored = candidates
-      .map((m) => {
-        const price = pickPrice(m.market);
-        return { ticker: m.ticker, price };
-      })
-      .filter((m) => m.ticker && m.price !== null) as Array<{ ticker: string; price: number }>;
-
-    if (scored.length === 0) {
-      logger('Kalshi spread skipped: no spreads found');
-      if (cfg.testMode) {
-        recordTestEvent({
-          ticker: `${slug}`,
-          side,
-          count: cfg.betUnitSize,
-          body: { note: 'spread skipped: no spreads found' }
-        });
-      }
-      recordLiveEvent({
-        side,
-        kind: 'spread',
-        ticker: null,
-        count: cfg.betUnitSize,
-        note: 'no-spreads',
-        details: {
-          sample: markets.slice(0, 5).map((m) => m.ticker).filter(Boolean)
-        }
-      });
-      return { ok: true, skippedReason: 'no-spreads' };
-    }
-
-    const inBand = scored.filter((s) => s.price >= 40 && s.price <= 60);
-    const pick = (inBand.length ? inBand : scored).reduce((best, cur) => {
-      const target = Math.abs(cur.price - 50);
-      const bestScore = Math.abs(best.price - 50);
-      return target < bestScore ? cur : best;
-    });
-
-    chosenTicker = pick.ticker;
-    chosenPrice = pick.price;
-
-    const orderBody = {
-      ticker: chosenTicker,
-      side: 'yes',
-      action: 'buy',
-      count: cfg.betUnitSize,
-      type: 'market',
-      yes_price: chosenPrice ?? 50
-    };
-
-    if (cfg.testMode) {
-      recordTestEvent({
-        ticker: chosenTicker,
-        side,
-        count: cfg.betUnitSize,
-        body: { ...orderBody, observed_price: chosenPrice }
-      });
-      logger('Kalshi test mode: skipping spread order', chosenTicker);
-      return { ok: true, skippedReason: 'test-mode' };
-    }
-
-    const response = await signedFetch('/portfolio/orders', 'POST', orderBody);
-    if (!response.ok) {
-      const rawText = await safeReadText(response);
-      const text = rawText && rawText.trim() ? rawText : '(empty body)';
-      logger('Kalshi spread rejected', response.status, text);
-      recordLiveEvent({
-        side,
-      kind: 'spread',
-      ticker: chosenTicker,
-      count: cfg.betUnitSize,
-      status: response.status,
-      responseBody: text || undefined,
-      note: chosenPrice !== null ? `price~${chosenPrice}` : undefined,
-      details:
-        response.status === 401
-          ? { ...getLastSignatureSnapshot(), body: orderBody }
-          : { body: orderBody }
-    });
-    return { ok: false, error: `Kalshi request failed (${response.status})` };
-    }
-
-    logger('Kalshi spread placed', chosenTicker, cfg.betUnitSize, 'at~', chosenPrice);
-    recordLiveEvent({
-      side,
-      kind: 'spread',
-      ticker: chosenTicker,
-      count: cfg.betUnitSize,
-      status: response.status,
-      note: chosenPrice !== null ? `price~${chosenPrice}` : undefined
-    });
-    return { ok: true };
-  } catch (error) {
-    const message = (error as Error).message ?? 'spread-error';
-    logger('Kalshi spread error', message);
-    recordLiveEvent({ side, kind: 'spread', ticker: chosenTicker, count: cfg.betUnitSize, error: message });
-    if (cfg.testMode) {
-      recordTestEvent({
-        ticker: chosenTicker ?? 'unknown',
-        side,
-        count: cfg.betUnitSize,
-        body: { note: 'spread error', error: message }
-      });
-    }
-    return { ok: false, error: message };
-  }
+  return { ok: true, skippedReason: 'spread-disabled' };
 }
 
 function pickPrice(market: { yes_bid?: number; yes_ask?: number; last_price?: number }): number | null {

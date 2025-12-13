@@ -57,8 +57,8 @@ const kalshiConfigPayload = z.object({
   moneylineEnabled: z.coerce.boolean().optional(),
   spreadEnabled: z.coerce.boolean().optional(),
   slug: z.string().max(120).optional(),
-  yesTeamCode: z.string().max(32).optional(),
-  noTeamCode: z.string().max(32).optional(),
+  homeSide: z.enum(['YES', 'NO']).optional(),
+  awaySide: z.enum(['YES', 'NO']).optional(),
   betUnitSize: z.coerce.number().int().min(1).optional(),
   testMode: z.coerce.boolean().optional()
 });

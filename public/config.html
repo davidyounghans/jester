@@ -130,12 +130,12 @@
         </label>
         <div class="grid">
           <label>
-            Team 1 code (Home button → YES on this team)
-            <input type="text" id="yesTeamCode" placeholder="DEN" />
+            Home (choose YES or NO)
+            <input type="text" id="homeSide" placeholder="YES or NO" />
           </label>
           <label>
-            Team 2 code (Away button → YES on this team)
-            <input type="text" id="noTeamCode" placeholder="HOU" />
+            Away (choose YES or NO)
+            <input type="text" id="awaySide" placeholder="YES or NO" />
           </label>
         </div>
         <label>
@@ -186,8 +186,8 @@
 
       const enabledInput = document.querySelector('#enabled');
       const slugInput = document.querySelector('#slug');
-      const yesTeamInput = document.querySelector('#yesTeamCode');
-      const noTeamInput = document.querySelector('#noTeamCode');
+      const homeSideInput = document.querySelector('#homeSide');
+      const awaySideInput = document.querySelector('#awaySide');
       const unitInput = document.querySelector('#betUnitSize');
       const testModeInput = document.querySelector('#testMode');
       const moneylineEnabledInput = document.querySelector('#moneylineEnabled');
@@ -217,8 +217,8 @@
         const payload = {
           enabled: enabledInput.checked,
           slug: slugInput.value,
-          yesTeamCode: yesTeamInput.value,
-          noTeamCode: noTeamInput.value,
+          homeSide: homeSideInput.value,
+          awaySide: awaySideInput.value,
           betUnitSize: Number(unitInput.value) || 1,
           moneylineEnabled: moneylineEnabledInput.checked,
           spreadEnabled: spreadEnabledInput.checked,
@@ -270,8 +270,8 @@
       function populateForm(config) {
         enabledInput.checked = !!config.enabled;
         slugInput.value = config.slug ?? '';
-        yesTeamInput.value = config.yesTeamCode ?? '';
-        noTeamInput.value = config.noTeamCode ?? '';
+        homeSideInput.value = config.homeSide ?? '';
+        awaySideInput.value = config.awaySide ?? '';
         unitInput.value = config.betUnitSize ?? 1;
         testModeInput.checked = !!config.testMode;
         moneylineEnabledInput.checked = config.moneylineEnabled ?? true;
