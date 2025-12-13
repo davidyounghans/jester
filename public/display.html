@@ -93,6 +93,15 @@
         font-size: 1rem;
       }
 
+      input[type='text'] {
+        border-radius: 0.75rem;
+        border: 1px solid rgba(248, 250, 252, 0.2);
+        background: rgba(15, 23, 42, 0.6);
+        padding: 0.75rem 1rem;
+        color: inherit;
+        font-size: 0.95rem;
+      }
+
       button {
         padding: 0.75rem 1.2rem;
         border-radius: 0.75rem;
@@ -117,6 +126,10 @@
         <input type="url" id="serverInput" name="server" placeholder="https://jester.fly.dev" required readonly />
         <label for="tokenInput">Access token (optional)</label>
         <input type="password" id="tokenInput" name="token" placeholder="shared secret" />
+        <label for="homeNotes">Home notes (optional)</label>
+        <input type="text" id="homeNotes" placeholder="e.g., YES" />
+        <label for="awayNotes">Away notes (optional)</label>
+        <input type="text" id="awayNotes" placeholder="e.g., NO" />
         <button type="submit">Connect</button>
       </form>
     </main>
@@ -130,14 +143,20 @@
       const serverForm = document.querySelector('#serverForm');
       const serverInput = document.querySelector('#serverInput');
       const tokenInput = document.querySelector('#tokenInput');
+      const homeNotesInput = document.querySelector('#homeNotes');
+      const awayNotesInput = document.querySelector('#awayNotes');
 
       let link = null;
       let resetTimer = null;
       const savedToken = localStorage.getItem(`${STORAGE_KEY}-token`);
+      const savedHomeNotes = localStorage.getItem(`${STORAGE_KEY}-home-notes`);
+      const savedAwayNotes = localStorage.getItem(`${STORAGE_KEY}-away-notes`);
       serverInput.value = DEFAULT_SERVER;
       if (savedToken) {
         tokenInput.value = savedToken;
       }
+      if (savedHomeNotes) homeNotesInput.value = savedHomeNotes;
+      if (savedAwayNotes) awayNotesInput.value = savedAwayNotes;
       connect(DEFAULT_SERVER);
 
       serverForm.addEventListener('submit', (event) => {
@@ -153,6 +172,8 @@
         }
 
         localStorage.setItem(`${STORAGE_KEY}-token`, tokenInput.value.trim());
+        localStorage.setItem(`${STORAGE_KEY}-home-notes`, homeNotesInput.value.trim());
+        localStorage.setItem(`${STORAGE_KEY}-away-notes`, awayNotesInput.value.trim());
         link?.dispose();
         link = new RealtimeLink({
           role: 'display',
@@ -176,7 +197,14 @@
         } else if (payload.side === 'cancel') {
           label = 'CANCEL';
         }
-        messageEl.textContent = label;
+        const note =
+          payload.side === 'home'
+            ? homeNotesInput.value.trim()
+            : payload.side === 'away'
+            ? awayNotesInput.value.trim()
+            : '';
+        const displayText = note ? `${label} / ${note}` : label;
+        messageEl.textContent = displayText;
         document.body.dataset.side = payload.side;
         document.body.classList.remove('flash');
         void document.body.offsetWidth; // restart animation
