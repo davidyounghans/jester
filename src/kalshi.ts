@@ -502,7 +502,23 @@ async function placeSpread(cfg: KalshiConfig, side: TriggerSide, logger: (...arg
       return { ok: true, skippedReason: 'no-markets' };
     }
 
-    const spreadMarkets = markets.filter((m) => isSpreadTicker(m.ticker ?? ''));
+    const spreadPrefix = `${spreadSlug.toUpperCase()}-`;
+    const spreadMarkets = markets.filter((m) => {
+      const t = (m.ticker ?? '').toUpperCase();
+      return isSpreadTicker(t) && t.startsWith(spreadPrefix);
+    });
+    if (!spreadMarkets.length) {
+      logger('Kalshi spread skipped: no spread markets matched prefix', spreadPrefix);
+      recordLiveEvent({
+        side,
+        kind: 'spread',
+        ticker: null,
+        count: cfg.betUnitSize,
+        note: 'no-spreads-for-prefix',
+        details: { spreadSlug, prefix: spreadPrefix }
+      });
+      return { ok: true, skippedReason: 'no-spreads-for-prefix' };
+    }
     const enriched = spreadMarkets
       .map((m) => {
         const ticker = m.ticker ?? '';
