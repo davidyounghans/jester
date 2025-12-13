@@ -170,7 +170,7 @@ async function signedFetch(pathname: string, method: string, body: unknown, time
   const { fullPath } = normalizeApiPath(pathname);
   const url = new URL(fullPath, API_BASE);
   const isBodyAllowed = method.toUpperCase() !== 'GET' && method.toUpperCase() !== 'HEAD';
-  const serializedBody = isBodyAllowed && body ? JSON.stringify(body) : '';
+  const serializedBody = isBodyAllowed && body ? stableStringify(body) : '';
   const timestamp = Date.now().toString();
   const signaturePayload = `${timestamp}${method.toUpperCase()}${url.pathname}${url.search ?? ''}${serializedBody}`;
 
@@ -216,10 +216,21 @@ function buildSignaturePayload(pathname: string, method: string, body: unknown) 
   const { fullPath } = normalizeApiPath(pathname);
   const url = new URL(fullPath, API_BASE);
   const isBodyAllowed = method.toUpperCase() !== 'GET' && method.toUpperCase() !== 'HEAD';
-  const serializedBody = isBodyAllowed && body ? JSON.stringify(body) : '';
+  const serializedBody = isBodyAllowed && body ? stableStringify(body) : '';
   const timestamp = Date.now().toString();
   const signaturePayload = `${timestamp}${method.toUpperCase()}${url.pathname}${url.search ?? ''}${serializedBody}`;
   return { url, timestamp, signaturePayload, serializedBody };
+}
+
+function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== 'object') {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((v) => stableStringify(v)).join(',')}]`;
+  }
+  const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${stableStringify(v)}`).join(',')}}`;
 }
 
 function loadConfigFromDisk(): KalshiConfig {
@@ -397,7 +408,6 @@ async function placeMoneyline(cfg: KalshiConfig, side: TriggerSide, logger: (...
   const orderBody = {
     ticker,
     side: 'yes',
-    action: 'buy',
     count: cfg.betUnitSize,
     type: 'market'
   };
@@ -579,7 +589,6 @@ async function placeSpread(cfg: KalshiConfig, side: TriggerSide, logger: (...arg
     const orderBody = {
       ticker: chosenTicker,
       side: 'yes',
-      action: 'buy',
       count: cfg.betUnitSize,
       type: 'market'
     };
