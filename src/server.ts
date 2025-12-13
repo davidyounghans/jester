@@ -6,6 +6,7 @@ import { z } from 'zod';
 import {
   clearLiveEvents,
   clearTestEvents,
+  getKalshiBalanceSnapshot,
   getKalshiConfig,
   getLiveEvents,
   getTestEvents,
@@ -94,8 +95,9 @@ const httpServer = http.createServer(async (req: IncomingMessage, res: ServerRes
     }
 
     if (req.method === 'GET' && url.pathname === '/config/kalshi/test') {
+      const balance = await getKalshiBalanceSnapshot();
       res.writeHead(200, defaultJsonHeaders());
-      res.end(JSON.stringify({ events: getTestEvents() }));
+      res.end(JSON.stringify({ events: getTestEvents(), balance }));
       return;
     }
 
@@ -107,8 +109,9 @@ const httpServer = http.createServer(async (req: IncomingMessage, res: ServerRes
     }
 
     if (req.method === 'GET' && url.pathname === '/config/kalshi/live') {
+      const balance = await getKalshiBalanceSnapshot();
       res.writeHead(200, defaultJsonHeaders());
-      res.end(JSON.stringify({ events: getLiveEvents() }));
+      res.end(JSON.stringify({ events: getLiveEvents(), balance }));
       return;
     }
 

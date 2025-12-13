@@ -98,6 +98,23 @@ export function clearLiveEvents() {
   liveEventLog.length = 0;
 }
 
+export async function getKalshiBalanceSnapshot(): Promise<{ balance?: number | null; error?: string }> {
+  if (!ACCESS_KEY || !PRIVATE_KEY) {
+    return { error: 'missing-credentials' };
+  }
+  try {
+    const res = await signedFetch('/portfolio/balance', 'GET', '');
+    const text = await safeReadText(res);
+    if (!res.ok) {
+      return { error: `balance-${res.status}`, balance: null };
+    }
+    const json = JSON.parse(text) as { balance?: number };
+    return { balance: json.balance ?? null };
+  } catch (error) {
+    return { error: (error as Error).message ?? 'balance-error' };
+  }
+}
+
 export async function handleKalshiTrigger(side: TriggerSide, logger: (...args: unknown[]) => void): Promise<KalshiResult> {
   if (side === 'cancel') {
     return { ok: true, skippedReason: 'cancel-action' };
@@ -338,10 +355,9 @@ async function placeMoneyline(cfg: KalshiConfig, side: TriggerSide, logger: (...
   const mlCandidates = markets
     .map((m) => {
       const ticker = m.ticker ?? '';
-      const segments = normalizeSegments(ticker);
-      return { ticker, segments };
+      return { ticker };
     })
-    .filter((m) => isMoneyline(m.segments) && m.segments.includes(desiredCode));
+    .filter((m) => isMoneylineTicker(m.ticker) && m.ticker.toUpperCase().includes(desiredCode));
 
   mlCandidates.sort((a, b) => a.ticker.localeCompare(b.ticker));
   const ticker = mlCandidates[0]?.ticker ?? null;
@@ -481,10 +497,9 @@ async function placeSpread(cfg: KalshiConfig, side: TriggerSide, logger: (...arg
     const candidates = markets
       .map((m) => {
         const ticker = m.ticker ?? '';
-        const segments = normalizeSegments(ticker);
-        return { ticker, segments, market: m };
+        return { ticker, market: m };
       })
-      .filter((m) => isSpread(m.segments) && m.segments.includes(desiredCode));
+      .filter((m) => isSpreadTicker(m.ticker) && m.ticker.toUpperCase().includes(desiredCode));
     const scored = candidates
       .map((m) => {
         const price = pickPrice(m.market);
@@ -607,14 +622,15 @@ function coerceNum(value: unknown): number | null {
   return null;
 }
 
-function normalizeSegments(ticker: string) {
-  return ticker.toUpperCase().split('.');
+function isMoneylineTicker(ticker: string) {
+  const up = ticker.toUpperCase();
+  if (up.includes('SP')) return false;
+  if (up.includes('.ML') || up.includes('-ML') || up.includes('ML.')) return true;
+  // Fallback: for event-level tickers like KXNBAGAME-...-TEAM with no ML marker, treat as moneyline.
+  return true;
 }
 
-function isMoneyline(segments: string[]) {
-  return segments.includes('ML');
-}
-
-function isSpread(segments: string[]) {
-  return segments.includes('SP');
+function isSpreadTicker(ticker: string) {
+  const up = ticker.toUpperCase();
+  return up.includes('SP');
 }
