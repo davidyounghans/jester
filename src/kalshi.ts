@@ -34,6 +34,17 @@ const FETCH_TIMEOUT_MS = 8000;
 const ACCESS_KEY = process.env.KALSHI_ACCESS_KEY ?? process.env.KALSHI_API_KEY;
 const PRIVATE_KEY = process.env.KALSHI_PRIVATE_KEY ?? '';
 
+let lastSignatureDebug:
+  | {
+      pathname: string;
+      method: string;
+      serializedBody: string;
+      timestamp: string;
+      signature: string;
+      url: string;
+    }
+  | null = null;
+
 const defaultConfig: KalshiConfig = {
   enabled: false,
   moneylineEnabled: true,
@@ -128,6 +139,9 @@ export async function handleKalshiTrigger(side: TriggerSide, logger: (...args: u
   if (!cfg.slug) return { ok: true, skippedReason: 'missing-slug' };
   if (!cfg.yesTeamCode || !cfg.noTeamCode) return { ok: true, skippedReason: 'missing-team-codes' };
 
+  // First: log balance GET so we can confirm credentials/connectivity
+  await logBalanceOnly(side, logger);
+
   // Only moneyline bets for now
   if (cfg.moneylineEnabled) {
     return await placeMoneyline(cfg, side, logger);
@@ -179,6 +193,16 @@ async function signedFetch(pathname: string, method: string, body: unknown, time
     fetchOptions.body = serializedBody;
   }
 
+  // keep a debug snapshot of what we actually signed
+  lastSignatureDebug = {
+    pathname: url.pathname,
+    method: method.toUpperCase(),
+    serializedBody,
+    timestamp,
+    signature: signature.toString('base64'),
+    url: url.toString()
+  };
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -201,6 +225,10 @@ function buildSignaturePayload(pathname: string, method: string, body: unknown) 
   const timestamp = Date.now().toString();
   const signaturePayload = `${timestamp}${method.toUpperCase()}${url.pathname}${url.search ?? ''}${serializedBody}`;
   return { url, timestamp, signaturePayload, serializedBody };
+}
+
+function getLastSignatureSnapshot() {
+  return lastSignatureDebug ? { ...lastSignatureDebug } : undefined;
 }
 
 function loadConfigFromDisk(): KalshiConfig {
@@ -378,6 +406,7 @@ async function placeMoneyline(cfg: KalshiConfig, side: TriggerSide, logger: (...
   const orderBody = {
     ticker,
     side: 'yes',
+    action: 'buy',
     count: cfg.betUnitSize,
     type: 'market'
   };
@@ -407,7 +436,7 @@ async function placeMoneyline(cfg: KalshiConfig, side: TriggerSide, logger: (...
         status: response.status,
         responseBody: text || undefined,
         note: eventTicker ?? undefined,
-        details: response.status === 401 ? buildSignaturePayload('/portfolio/orders', 'POST', orderBody) : undefined
+        details: response.status === 401 ? getLastSignatureSnapshot() : undefined
       });
       return { ok: false, error: `Kalshi request failed (${response.status})` };
     }
@@ -551,6 +580,7 @@ async function placeSpread(cfg: KalshiConfig, side: TriggerSide, logger: (...arg
     const orderBody = {
       ticker: chosenTicker,
       side: 'yes',
+      action: 'buy',
       count: cfg.betUnitSize,
       type: 'market'
     };
@@ -573,15 +603,15 @@ async function placeSpread(cfg: KalshiConfig, side: TriggerSide, logger: (...arg
       logger('Kalshi spread rejected', response.status, text);
       recordLiveEvent({
         side,
-        kind: 'spread',
-        ticker: chosenTicker,
-        count: cfg.betUnitSize,
-        status: response.status,
-        responseBody: text || undefined,
-        note: chosenPrice !== null ? `price~${chosenPrice}` : undefined,
-        details: response.status === 401 ? buildSignaturePayload('/portfolio/orders', 'POST', orderBody) : undefined
-      });
-      return { ok: false, error: `Kalshi request failed (${response.status})` };
+      kind: 'spread',
+      ticker: chosenTicker,
+      count: cfg.betUnitSize,
+      status: response.status,
+      responseBody: text || undefined,
+      note: chosenPrice !== null ? `price~${chosenPrice}` : undefined,
+      details: response.status === 401 ? getLastSignatureSnapshot() : undefined
+    });
+    return { ok: false, error: `Kalshi request failed (${response.status})` };
     }
 
     logger('Kalshi spread placed', chosenTicker, cfg.betUnitSize, 'at~', chosenPrice);
