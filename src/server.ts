@@ -188,7 +188,7 @@ wss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
       }
 
   if (parsed.type === 'register') {
-        if (ACCESS_TOKEN && client.role === 'control' && parsed.token !== ACCESS_TOKEN) {
+        if (ACCESS_TOKEN && parsed.role === 'control' && parsed.token !== ACCESS_TOKEN) {
           send({ type: 'error', message: 'unauthorized' });
           ws.close();
           return;

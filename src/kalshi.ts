@@ -259,32 +259,49 @@ async function fetchMarketsBySlug(slug: string, logger: (...args: unknown[]) => 
   const safeSlug = sanitizeSlug(slug);
   if (!safeSlug) return { markets: [], eventTicker: undefined, note: 'missing-slug' };
 
-  const url = `/events/${encodeURIComponent(safeSlug)}?with_nested_markets=true`;
+  // First try the event endpoint with nested markets
+  const eventUrl = `/events/${encodeURIComponent(safeSlug)}?with_nested_markets=true`;
   try {
-    const res = await signedFetch(url, 'GET', '');
+    const res = await signedFetch(eventUrl, 'GET', '');
     if (res.status === 404) {
       return { markets: [], eventTicker: safeSlug, note: 'not-found' };
     }
-    if (!res.ok) {
+    if (res.ok) {
+      const json = (await res.json()) as {
+        markets?: Array<{ ticker: string; yes_bid?: number; yes_ask?: number; last_price?: number }>;
+        event_ticker?: string;
+        ticker?: string;
+        event?: { markets?: Array<{ ticker: string; yes_bid?: number; yes_ask?: number; last_price?: number }>; event_ticker?: string };
+      };
+      const markets = json.markets ?? json.event?.markets ?? [];
+      const eventTicker = json.ticker ?? json.event_ticker ?? json.event?.event_ticker ?? safeSlug;
+      if (markets.length) return { markets, eventTicker };
+    } else {
       const text = await safeReadText(res);
       logger('Kalshi event fetch failed', res.status, text);
-      return { markets: [], eventTicker: safeSlug, note: `event-fetch-${res.status}` };
     }
+  } catch (error) {
+    logger('Kalshi event fetch error', (error as Error).message ?? 'event-fetch-error');
+  }
 
-    const json = (await res.json()) as {
-      markets?: Array<{ ticker: string; yes_bid?: number; yes_ask?: number; last_price?: number }>;
-      event_ticker?: string;
-      ticker?: string;
-      event?: { markets?: Array<{ ticker: string; yes_bid?: number; yes_ask?: number; last_price?: number }>; event_ticker?: string };
-    };
-
-    const markets =
-      json.markets ?? json.event?.markets ?? [];
-    const eventTicker = json.ticker ?? json.event_ticker ?? json.event?.event_ticker ?? safeSlug;
-    return { markets, eventTicker };
+  // Fallback: direct markets query by event_ticker
+  try {
+    const qs = new URLSearchParams({
+      event_ticker: safeSlug,
+      status: 'open',
+      limit: '500'
+    });
+    const res = await signedFetch(`/markets?${qs.toString()}`, 'GET', '');
+    if (!res.ok) {
+      const text = await safeReadText(res);
+      logger('Kalshi markets-by-event fetch failed', res.status, text);
+      return { markets: [], eventTicker: safeSlug, note: `markets-fetch-${res.status}` };
+    }
+    const json = (await res.json()) as { markets?: Array<{ ticker: string; yes_bid?: number; yes_ask?: number; last_price?: number }> };
+    return { markets: json.markets ?? [], eventTicker: safeSlug };
   } catch (error) {
     const message = (error as Error).message ?? 'fetch-error';
-    logger('Kalshi event fetch error', message);
+    logger('Kalshi markets fallback error', message);
     return { markets: [], eventTicker: safeSlug, note: message };
   }
 }
