@@ -200,10 +200,6 @@
       const liveOutput = document.querySelector('#liveOutput');
       const liveRefreshBtn = document.querySelector('#refreshLive');
       const liveClearBtn = document.querySelector('#clearLive');
-      const envStatus = document.createElement('div');
-      envStatus.style.fontSize = '0.85rem';
-      envStatus.style.opacity = '0.8';
-      statusEl.insertAdjacentElement('afterend', envStatus);
 
       const savedToken = localStorage.getItem(`${STORAGE_KEY}-token`);
       serverInput.value = DEFAULT_SERVER;
@@ -306,7 +302,6 @@
           .then((res) => res.json())
           .then((data) => {
             const events = data.events ?? [];
-            renderEnv(data.env, data.balance);
             if (!events.length) {
               logOutput.textContent = 'No test events logged yet.';
               return;
@@ -342,7 +337,6 @@
           .then((res) => res.json())
           .then((data) => {
             const events = data.events ?? [];
-            renderEnv(data.env, data.balance);
             if (!events.length) {
               liveOutput.textContent = 'No live events logged yet.';
               return;
@@ -365,15 +359,6 @@
           });
       }
 
-      function renderEnv(env, balance) {
-        const parts = [];
-        if (env?.apiBase) parts.push(`apiBase=${env.apiBase}`);
-        if (env?.accessKeyPrefix) parts.push(`key=${env.accessKeyPrefix}`);
-        if (env?.privateKeyHead) parts.push(`privHead=${env.privateKeyHead}`);
-        if (balance?.balance !== undefined) parts.push(`balance=${balance.balance}`);
-        if (balance?.error) parts.push(`balanceError=${balance.error}`);
-        envStatus.textContent = parts.length ? `Env: ${parts.join(' | ')}` : '';
-      }
 
       function clearLiveLog() {
         const base = DEFAULT_SERVER;

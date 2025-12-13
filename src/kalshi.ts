@@ -98,16 +98,6 @@ export function clearLiveEvents() {
   liveEventLog.length = 0;
 }
 
-export function getKalshiEnvInfo() {
-  const accessKey = ACCESS_KEY ?? '';
-  const priv = PRIVATE_KEY ?? '';
-  return {
-    apiBase: API_BASE,
-    accessKeyPrefix: accessKey ? `${accessKey.slice(0, 4)}...${accessKey.slice(-4)}` : '',
-    privateKeyHead: priv ? priv.split('\n')[0] ?? '' : ''
-  };
-}
-
 export async function getKalshiBalanceSnapshot(): Promise<{ balance?: number | null; error?: string }> {
   if (!ACCESS_KEY || !PRIVATE_KEY) {
     return { error: 'missing-credentials' };
@@ -135,9 +125,15 @@ export async function handleKalshiTrigger(side: TriggerSide, logger: (...args: u
     return { ok: true, skippedReason: 'module-disabled' };
   }
 
-  // Temporarily: no orders, just log current balance when a signal arrives.
-  const result = await logBalanceOnly(side, logger);
-  return result;
+  if (!cfg.slug) return { ok: true, skippedReason: 'missing-slug' };
+  if (!cfg.yesTeamCode || !cfg.noTeamCode) return { ok: true, skippedReason: 'missing-team-codes' };
+
+  // Only moneyline bets for now
+  if (cfg.moneylineEnabled) {
+    return await placeMoneyline(cfg, side, logger);
+  }
+
+  return { ok: true, skippedReason: 'no-moneyline-enabled' };
 }
 
 function normalizeApiPath(pathname: string) {
@@ -397,8 +393,6 @@ async function placeMoneyline(cfg: KalshiConfig, side: TriggerSide, logger: (...
     return { ok: false, skippedReason: 'missing-credentials', error: 'Missing KALSHI_ACCESS_KEY or KALSHI_PRIVATE_KEY' };
   }
 
-  const envInfo = getKalshiEnvInfo();
-
   try {
     const response = await signedFetch('/portfolio/orders', 'POST', orderBody);
     if (!response.ok) {
@@ -413,10 +407,7 @@ async function placeMoneyline(cfg: KalshiConfig, side: TriggerSide, logger: (...
         status: response.status,
         responseBody: text || undefined,
         note: eventTicker ?? undefined,
-        details:
-          response.status === 401
-            ? { ...buildSignaturePayload('/portfolio/orders', 'POST', orderBody), env: envInfo }
-            : { env: envInfo }
+        details: response.status === 401 ? buildSignaturePayload('/portfolio/orders', 'POST', orderBody) : undefined
       });
       return { ok: false, error: `Kalshi request failed (${response.status})` };
     }
@@ -428,13 +419,12 @@ async function placeMoneyline(cfg: KalshiConfig, side: TriggerSide, logger: (...
       ticker,
       count: cfg.betUnitSize,
       status: response.status,
-      note: eventTicker ?? undefined,
-      details: { env: envInfo }
+      note: eventTicker ?? undefined
     });
     return { ok: true };
   } catch (error) {
     logger('Kalshi moneyline error', error);
-    recordLiveEvent({ side, kind: 'moneyline', ticker, count: cfg.betUnitSize, error: (error as Error).message, details: { env: envInfo } });
+    recordLiveEvent({ side, kind: 'moneyline', ticker, count: cfg.betUnitSize, error: (error as Error).message });
     return { ok: false, error: (error as Error).message };
   }
 }
@@ -476,8 +466,6 @@ async function placeSpread(cfg: KalshiConfig, side: TriggerSide, logger: (...arg
     logger('Kalshi spread disabled: missing credentials');
     return { ok: false, skippedReason: 'missing-credentials', error: 'Missing KALSHI_ACCESS_KEY or KALSHI_PRIVATE_KEY' };
   }
-
-  const envInfo = getKalshiEnvInfo();
 
   try {
     if (cfg.testMode && (!ACCESS_KEY || !PRIVATE_KEY)) {
@@ -591,10 +579,7 @@ async function placeSpread(cfg: KalshiConfig, side: TriggerSide, logger: (...arg
         status: response.status,
         responseBody: text || undefined,
         note: chosenPrice !== null ? `price~${chosenPrice}` : undefined,
-        details:
-          response.status === 401
-            ? { ...buildSignaturePayload('/portfolio/orders', 'POST', orderBody), env: envInfo }
-            : { env: envInfo }
+        details: response.status === 401 ? buildSignaturePayload('/portfolio/orders', 'POST', orderBody) : undefined
       });
       return { ok: false, error: `Kalshi request failed (${response.status})` };
     }
@@ -606,14 +591,13 @@ async function placeSpread(cfg: KalshiConfig, side: TriggerSide, logger: (...arg
       ticker: chosenTicker,
       count: cfg.betUnitSize,
       status: response.status,
-      note: chosenPrice !== null ? `price~${chosenPrice}` : undefined,
-      details: { env: envInfo }
+      note: chosenPrice !== null ? `price~${chosenPrice}` : undefined
     });
     return { ok: true };
   } catch (error) {
     const message = (error as Error).message ?? 'spread-error';
     logger('Kalshi spread error', message);
-    recordLiveEvent({ side, kind: 'spread', ticker: chosenTicker, count: cfg.betUnitSize, error: message, details: { env: envInfo } });
+    recordLiveEvent({ side, kind: 'spread', ticker: chosenTicker, count: cfg.betUnitSize, error: message });
     if (cfg.testMode) {
       recordTestEvent({
         ticker: chosenTicker ?? 'unknown',
@@ -660,7 +644,6 @@ function isSpreadTicker(ticker: string) {
 }
 
 async function logBalanceOnly(cfgSide: TriggerSide, logger: (...args: unknown[]) => void): Promise<KalshiResult> {
-  const envInfo = getKalshiEnvInfo();
   try {
     const res = await signedFetch('/portfolio/balance', 'GET', '');
     const text = await safeReadText(res);
@@ -681,7 +664,7 @@ async function logBalanceOnly(cfgSide: TriggerSide, logger: (...args: unknown[])
       status: res.status,
       responseBody: text || undefined,
       note,
-      details: { env: envInfo, balance }
+      details: { balance }
     });
 
     if (!res.ok) {
@@ -694,8 +677,7 @@ async function logBalanceOnly(cfgSide: TriggerSide, logger: (...args: unknown[])
       kind: 'moneyline',
       ticker: 'balance-only',
       count: 0,
-      error: (error as Error).message,
-      details: { env: envInfo }
+      error: (error as Error).message
     });
     return { ok: false, error: (error as Error).message };
   }
