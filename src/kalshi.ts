@@ -141,12 +141,20 @@ export async function handleKalshiTrigger(side: TriggerSide, logger: (...args: u
   // First: log balance GET so we can confirm credentials/connectivity
   await logBalanceOnly(side, logger);
 
-  // Only moneyline bets for now
+  const results: KalshiResult[] = [];
+
   if (cfg.moneylineEnabled) {
-    return await placeMoneyline(cfg, side, logger);
+    results.push(await placeMoneyline(cfg, side, logger));
+  }
+  if (cfg.spreadEnabled) {
+    results.push(await placeSpread(cfg, side, logger));
   }
 
-  return { ok: true, skippedReason: 'no-moneyline-enabled' };
+  if (!results.length) {
+    return { ok: true, skippedReason: 'no-modules-enabled' };
+  }
+
+  return results.every((r) => r.ok) ? { ok: true } : { ok: false, error: 'one-or-more-orders-failed' };
 }
 
 function normalizeApiPath(pathname: string) {
@@ -474,7 +482,8 @@ async function placeSpread(cfg: KalshiConfig, side: TriggerSide, logger: (...arg
         kind: 'spread',
         ticker: null,
         count: cfg.betUnitSize,
-        note: note ?? 'no-markets'
+        note: note ?? 'no-markets',
+        details: { slug: cfg.slug, suffix: targetSuffix }
       });
       return { ok: true, skippedReason: 'no-markets' };
     }
@@ -488,22 +497,22 @@ async function placeSpread(cfg: KalshiConfig, side: TriggerSide, logger: (...arg
       .filter((m) => isSpreadTicker(m.ticker) && m.ticker.toUpperCase().includes(targetSuffix) && m.price !== null);
 
     const inBand = candidates.filter((c) => c.price! >= 40 && c.price! <= 60);
-    const pool = inBand.length ? inBand : candidates;
-    if (!pool.length) {
-      logger('Kalshi spread skipped: no spreads with price', targetSuffix);
+    if (!inBand.length) {
+      logger('Kalshi spread skipped: no spreads in 40-60 band', targetSuffix);
       recordLiveEvent({
         side,
         kind: 'spread',
         ticker: null,
         count: cfg.betUnitSize,
-        note: 'no-spread-price'
+        note: 'no-spread-in-band',
+        details: { suffix: targetSuffix, sample: candidates.slice(0, 5) }
       });
-      return { ok: true, skippedReason: 'no-spread-price' };
+      return { ok: true, skippedReason: 'no-spread-in-band' };
     }
 
-    pool.sort((a, b) => Math.abs((a.price ?? 0) - 50) - Math.abs((b.price ?? 0) - 50));
-    chosenTicker = pool[0].ticker;
-    chosenPrice = Math.max(40, Math.min(60, pool[0].price ?? 50));
+    inBand.sort((a, b) => Math.abs((a.price ?? 0) - 50) - Math.abs((b.price ?? 0) - 50));
+    chosenTicker = inBand[0].ticker;
+    chosenPrice = inBand[0].price ?? 50;
 
     const orderBody = {
       ticker: chosenTicker,
